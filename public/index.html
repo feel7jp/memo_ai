@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notion AI Memo - Chat</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- 固定ヘッダー -->
+        <header class="fixed-header">
+            <div class="header-content">
+                <h1>📝 Notion AI Memo</h1>
+                <div class="header-controls">
+                    <select id="appSelector">
+                        <option disabled selected>読み込み中...</option>
+                    </select>
+                    <button id="viewContentBtn" class="header-btn" title="ページ内容を表示" disabled>📄 内容</button>
+                    <button id="settingsBtn" class="header-btn" title="設定" disabled>⚙️ 設定</button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Settings Dropdown Menu -->
+        <div id="settingsMenu" class="settings-menu hidden">
+            <button id="editPromptMenuItem" class="menu-item">
+                <span class="menu-icon">📝</span>
+                <span>プロンプト編集</span>
+            </button>
+            <button id="modelSelectMenuItem" class="menu-item">
+                <span class="menu-icon">🧠</span>
+                <span>モデル選択</span>
+            </button>
+            <label class="menu-item toggle-item">
+                <div class="toggle-label">
+                    <span class="menu-icon">📄</span>
+                    <span>ページを参照</span>
+                </div>
+                <input type="checkbox" id="referencePageToggle">
+                <span class="toggle-switch"></span>
+            </label>
+            <label class="menu-item toggle-item">
+                <div class="toggle-label">
+                    <span class="menu-icon">ℹ️</span>
+                    <span>AI情報表示</span>
+                </div>
+                <input type="checkbox" id="showModelInfoToggle" checked>
+                <span class="toggle-switch"></span>
+            </label>
+            <div class="menu-divider"></div>
+            <div class="menu-info-item">
+                <span class="menu-icon">💰</span>
+                <span>推定コスト: <span id="sessionCost">$0.0000</span></span>
+            </div>
+        </div>
+
+        <!-- チャットセクション -->
+        <section class="chat-section">
+            <div id="chatHistory" class="chat-history">
+                <!-- チャット履歴がここに表示される -->
+            </div>
+        </section>
+
+        <!-- 入力エリア -->
+        <div class="input-container">
+            <!-- State Display Area -->
+            <div id="stateDisplay" class="state-display hidden">
+                <div class="state-header" id="stateHeader">
+                    <span id="stateIcon">🔄</span>
+                    <span id="stateText">Processing...</span>
+                    <button id="stateToggle" class="state-toggle">▼</button>
+                </div>
+                <div id="stateDetails" class="state-details hidden">
+                    <pre id="stateDetailsContent"></pre>
+                </div>
+            </div>
+
+            <!-- ステータスエリア -->
+            <div class="status-area">
+                <div id="loadingIndicator" class="loading-indicator hidden">
+                    <div class="spinner-small"></div>
+                    <span id="loadingText">処理中...</span>
+                </div>
+                <span id="saveStatus"></span>
+            </div>
+
+            <!-- 属性セクション（折りたたみ可能） -->
+            <div id="propertiesContainer" class="properties-container">
+                <button id="togglePropsBtn" class="toggle-props-btn">▼ 属性を表示</button>
+                <div id="propertiesSection" class="properties-section hidden">
+                    <form id="propertiesForm"></form>
+                </div>
+            </div>
+
+            <!-- メッセージ入力エリア -->
+            <div class="input-area">
+                <!-- 画像プレビューエリア -->
+                <div id="imagePreviewArea" class="image-preview-area hidden">
+                    <div class="image-preview-item">
+                        <img id="previewImg" src="" alt="Preview">
+                        <button id="removeImageBtn" class="remove-image-btn">×</button>
+                    </div>
+                </div>
+
+                <!-- 入力行 -->
+                <div class="input-row">
+                    <button id="addMediaBtn" class="btn-add-media" title="画像を追加">＋</button>
+                    <textarea id="memoInput" placeholder="メッセージを入力..." rows="1"></textarea>
+                    <button id="sendBtn" class="btn-send" title="送信">📤</button>
+                </div>
+
+                <!-- メディアメニュー -->
+                <div id="mediaMenu" class="media-menu hidden">
+                    <button id="cameraBtn">📷 カメラ</button>
+                    <button id="galleryBtn">🖼️ 画像を選択</button>
+                </div>
+
+                <!-- Hidden Inputs -->
+                <input type="file" id="cameraInput" accept="image/*" capture="user" class="hidden">
+                <input type="file" id="imageInput" accept="image/*" class="hidden">
+
+                <!-- チャットコントロール -->
+                <div class="chat-controls">
+                    <div class="spacer"></div>
+                    <button id="sessionClearBtn" class="btn-clear-session">会話クリア</button>
+                </div>
+            </div>
+
+
+
+            <!-- トースト -->
+            <div id="toast" class="hidden"></div>
+
+            <!-- システムプロンプト編集モーダル -->
+            <div id="promptModal" class="modal hidden">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h2>システムプロンプト編集</h2>
+                        <button id="closeModalBtn" class="close-btn">×</button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="modal-info">
+                            <strong>ターゲット:</strong> <span id="modalTargetName"></span>
+                        </div>
+                        <textarea id="promptTextarea" class="prompt-textarea" rows="10"
+                            placeholder="システムプロンプトを入力してください..."></textarea>
+
+                    </div>
+                    <div class="modal-footer">
+                        <button id="cancelPromptBtn" class="btn-secondary">キャンセル</button>
+                        <button id="savePromptBtn" class="btn-primary">保存</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Model Selection Modal -->
+            <div id="modelModal" class="modal hidden">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h2>AIモデル選択</h2>
+                        <button id="closeModelModalBtn" class="close-btn">×</button>
+                    </div>
+                    <div class="modal-body">
+                        <div id="modelList" class="model-list">
+                            <!-- Valid Models will be populated here -->
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button id="cancelModelBtn" class="btn-secondary">キャンセル</button>
+                        <button id="saveModelBtn" class="btn-primary">保存</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 新規ページ作成モーダル -->
+            <div id="newPageModal" class="modal hidden">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h2>新規ページ作成</h2>
+                        <button id="closeNewPageModalBtn" class="close-btn">×</button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="prop-field">
+                            <label class="prop-label">ページ名</label>
+                            <input type="text" id="newPageNameInput" class="prop-input" placeholder="ページ名を入力...">
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button id="cancelNewPageBtn" class="btn-secondary">キャンセル</button>
+                        <button id="createNewPageBtn" class="btn-primary">作成</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ページ内容全画面モーダル -->
+            <div id="contentModal" class="modal hidden">
+                <div class="modal-content modal-fullscreen">
+                    <div class="modal-header">
+                        <h2 id="contentModalTitle">📄 ページ内容</h2>
+                        <button id="closeContentModalBtn" class="close-btn">×</button>
+                    </div>
+                    <div class="modal-body">
+                        <div id="contentModalPreview" class="content-preview-box">
+                            <p class="placeholder-text">ターゲットを選択すると内容が表示されます</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <script src="script.js"></script>
+</body>
+
+</html>
