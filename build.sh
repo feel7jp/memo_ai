@@ -25,11 +25,8 @@ cat > .vercel/output/config.json << 'EOF'
   "version": 3,
   "routes": [
     {
-      "src": "/api/.*",
+      "src": "/api/(.*)",
       "dest": "/api/index.py"
-    },
-    {
-      "handle": "filesystem"
     }
   ]
 }
