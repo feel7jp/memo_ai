@@ -1,45 +1,52 @@
 
-// キャッシュ設定
-const CACHE_TTL = 180000; // 3分
+// --- キャッシュ設定 (Cache Settings) ---
+// リクエスト数を削減し、レスポンス速度を向上させるためにブラウザの localStorage を利用します。
+const CACHE_TTL = 180000; // 3分 (ミリ秒): キャッシュの有効期限
 const TARGETS_CACHE_KEY = 'memo_ai_targets';
 const SCHEMA_CACHE_PREFIX = 'memo_ai_schema_';
-const DRAFT_KEY = 'memo_ai_draft';
-const LAST_TARGET_KEY = 'memo_ai_last_target';
-const CHAT_HISTORY_KEY = 'memo_ai_chat_history';
-const LOCAL_PROMPT_PREFIX = 'memo_ai_prompt_';
+const DRAFT_KEY = 'memo_ai_draft';               // 入力中の下書き保存用キー
+const LAST_TARGET_KEY = 'memo_ai_last_target';   // 最後に選択したターゲットID
+const CHAT_HISTORY_KEY = 'memo_ai_chat_history'; // チャット履歴
+const LOCAL_PROMPT_PREFIX = 'memo_ai_prompt_';   // システムプロンプト（ターゲット毎）
 const SHOW_MODEL_INFO_KEY = 'memo_ai_show_model_info';
-const REFERENCE_PAGE_KEY = 'memo_ai_reference_page';
+const REFERENCE_PAGE_KEY = 'memo_ai_reference_page'; // 「ページを参照」チェックボックスの状態
 
+// デフォルトのシステムプロンプト
+// AIの基本的な役割定義。ターゲットごとに上書き可能です。
 const DEFAULT_SYSTEM_PROMPT = `優秀な秘書として、ユーザーのタスクを明確にする手伝いをすること。
 明確な実行できる タスク名に言い換えて。先頭に的確な絵文字を追加して
 画像の場合は、そこから何をしようとしているのか推定して、タスクにして。`;
 
-// グローバル状態
-let chatHistory = [];  // チャット履歴: [{type, message, properties, timestamp}]
-let chatSession = []; // {role: 'user'|'model'|'assistant', content: string}
-let currentTargetId = null;
-let currentTargetName = '';
-let currentTargetType = 'database';
-let currentSchema = null;
-let currentPreviewData = null;  // プレビューデータ（タグサジェスト用）
-let currentSystemPrompt = null; // サーバーからロードしたプロンプト
-let isComposing = false; // IME変換中フラグ
-// Image Input State
-let currentImageBase64 = null;
-let currentImageMimeType = null;
+// --- グローバル状態管理 (Global State) ---
+let chatHistory = [];  // UI表示用の全チャット履歴: [{type, message, properties, timestamp}]
+let chatSession = [];  // AIに送信する短期会話コンテキスト: {role, content}
+let currentTargetId = null;       // 現在選択中のNotionターゲットID
+let currentTargetName = '';       // 現在選択中のターゲット名
+let currentTargetType = 'database'; // 'database' または 'page'
+let currentSchema = null;         // Notionデータベースのスキーマ構造
+let currentPreviewData = null;    // タグサジェスト用のプレビューデータ
+let currentSystemPrompt = null;   // 現在適用されているシステムプロンプト
+let isComposing = false;          // IME入力中かどうか（Enter送信の制御に使用）
 
-// Model & Cost State
-let availableModels = [];
-let textOnlyModels = [];
-let visionModels = [];
-let defaultTextModel = null;
-let defaultMultimodalModel = null;
-let currentModel = null;
-let tempSelectedModel = null;
-let sessionCost = 0.0;
-let showModelInfo = true;
+// --- 画像入力状態 (Image State) ---
+let currentImageBase64 = null;    // 送信待機中の画像データ（Base64文字列）
+let currentImageMimeType = null;  // 画像のMIMEタイプ (image/jpeg, image/png 等)
+
+// --- モデル & コスト管理 (Model & Cost State) ---
+let availableModels = [];         // 利用可能な全モデルリスト
+let textOnlyModels = [];          // テキスト専用モデルリスト
+let visionModels = [];            // 画像認識対応モデルリスト
+let defaultTextModel = null;      // デフォルトのテキストモデル
+let defaultMultimodalModel = null; // デフォルトの画像対応モデル
+let currentModel = null;          // 現在ユーザーが選択しているモデル（nullなら自動選択）
+let tempSelectedModel = null;     // 設定モーダルでの一時選択状態
+let sessionCost = 0.0;            // 現在のセッションでの推定コスト合計
+let showModelInfo = true;         // チャットバブルにモデル情報を表示するかどうか
 
 document.addEventListener('DOMContentLoaded', () => {
+    // === 初期化処理 (Initialization) ===
+    // HTML要素の取得とイベントリスナーの設定を行います。
+
     // DOM要素の取得
     const appSelector = document.getElementById('appSelector');
     const memoInput = document.getElementById('memoInput');
@@ -48,7 +55,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const settingsBtn = document.getElementById('settingsBtn');
     const settingsMenu = document.getElementById('settingsMenu');
     
-    // --- Image Input Elements ---
+    // --- 画像アップロード UI (Image Input Elements) ---
     const addMediaBtn = document.getElementById('addMediaBtn');
     const mediaMenu = document.getElementById('mediaMenu');
     const cameraBtn = document.getElementById('cameraBtn');
@@ -57,21 +64,21 @@ document.addEventListener('DOMContentLoaded', () => {
     const imageInput = document.getElementById('imageInput');
     const removeImageBtn = document.getElementById('removeImageBtn');
     
-    // Media Menu Toggle
+    // メディアメニューのトグル
     if (addMediaBtn) {
         addMediaBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             mediaMenu.classList.toggle('hidden');
         });
         
-        // Close menu when clicking outside
+        // メニュー外クリックで閉じる処理
         document.addEventListener('click', (e) => {
             if (mediaMenu && !mediaMenu.contains(e.target) && e.target !== addMediaBtn) {
                 mediaMenu.classList.add('hidden');
             }
         });
 
-        // Camera/Gallery Trigger
+        // カメラ/ギャラリー起動ボタン
         if (cameraBtn) cameraBtn.addEventListener('click', () => {
             cameraInput.click();
             mediaMenu.classList.add('hidden');
@@ -82,7 +89,7 @@ document.addEventListener('DOMContentLoaded', () => {
             mediaMenu.classList.add('hidden');
         });
 
-        // File Input Handlers
+        // ファイル選択時のハンドラ（画像圧縮とプレビュー）
         const handleFileSelect = async (e) => {
             const file = e.target.files[0];
             if (!file) {
@@ -96,10 +103,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 updateState('📷', '画像を圧縮中...', { step: 'compressing' });
                 showToast("画像を処理中...");
                 
-                // Compress image before setting preview
+                // クライアントサイドでの画像圧縮 (Canvasを使用)
+                // サーバーへの転送量を減らし、AIのトークン消費を抑えるために重要です。
                 const { base64, mimeType } = await compressImage(file);
                 console.log('[Image Upload] Image compressed, new size:', base64.length, 'chars');
                 
+                // プレビュー表示
                 setPreviewImage(base64, mimeType);
                 updateState('✅', '画像準備完了', { step: 'ready' });
                 showToast("画像を読み込みました");
@@ -108,7 +117,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (stateDisplay) stateDisplay.classList.add('hidden');
                 }, 2000);
                 
-                // Reset input so same file can be selected again
+                // 同じファイルを再選択できるようにリセット
                 e.target.value = ''; 
             } catch (err) {
                 console.error('[Image Upload] Error:', err);
@@ -119,26 +128,29 @@ document.addEventListener('DOMContentLoaded', () => {
         if (cameraInput) cameraInput.addEventListener('change', handleFileSelect);
         if (imageInput) imageInput.addEventListener('change', handleFileSelect);
         
-        // Remove Image
+        // 画像削除ボタン
         if (removeImageBtn) removeImageBtn.addEventListener('click', () => {
             console.log('[Image Upload] Removing image preview');
             clearPreviewImage();
         });
     }
     
-    // 1. 下書き読み込み
+    // 1. ラストラフ（下書き）の復元
+    // ブラウザのlocalStorageから編集中のテキストを復元します。
     const savedDraft = localStorage.getItem(DRAFT_KEY);
     if (savedDraft) {
         memoInput.value = savedDraft;
+        // 高さ調整のためにinputイベントを発火
         memoInput.dispatchEvent(new Event('input'));
     }
     
-    // 2. テキストエリアの自動リサイズ
+    // 2. テキストエリアの自動リサイズ (Auto-resize)
+    // 入力内容に応じて高さを自動調整し、スマホでも見やすくします。
     memoInput.addEventListener('input', () => {
         memoInput.style.height = 'auto';
         memoInput.style.height = Math.min(memoInput.scrollHeight, 120) + 'px';
         
-        // 下書き保存
+        // 入力のたびに下書き保存
         localStorage.setItem(DRAFT_KEY, memoInput.value);
         updateSaveStatus("下書き保存中...");
     });
@@ -603,6 +615,8 @@ function applyRefinedText(text) {
 
 // --- セッション管理 ---
 
+// --- チャット・分析メインロジック (Core Logic) ---
+
 async function handleChatAI() {
     console.log('[handleChatAI] Function called');
     const memoInput = document.getElementById('memoInput');
@@ -612,12 +626,14 @@ async function handleChatAI() {
     console.log('[handleChatAI] Has image:', !!currentImageBase64);
     console.log('[handleChatAI] Target ID:', currentTargetId);
     
+    // 入力チェック: テキストまたは画像が必須
     if (!text && !currentImageBase64) {
         console.log('[handleChatAI] Early return: no text and no image');
         showToast("テキストまたは画像を入力してください");
         return;
     }
     
+    // ターゲット未選択チェック
     if (!currentTargetId) {
         console.log('[handleChatAI] Early return: no target selected');
         showToast("ターゲットを選択してください");
@@ -627,7 +643,8 @@ async function handleChatAI() {
     console.log('[handleChatAI] Validation passed, preparing message');
     updateState('📝', 'メッセージを準備中...', { step: 'preparing' });
     
-    // 1. Prepare User Message
+    // 1. ユーザーメッセージの表示準備
+    // テキストと画像（あれば）を組み合わせてチャットバブルに表示します。
     let displayMessage = text;
     if (currentImageBase64) {
         const imgTag = `<br><img src="data:${currentImageMimeType};base64,${currentImageBase64}" style="max-width:100px; border-radius:4px;">`;
@@ -635,35 +652,37 @@ async function handleChatAI() {
     }
     
     addChatMessage('user', displayMessage);
+    
+    // AIへのコンテキスト用にはテキストのみを追加（画像は別途送信）
     if (text) chatSession.push({role: 'user', content: text});
     
-    // CRITICAL: Copy image data BEFORE clearing
+    // 重要: 送信データを一時変数にコピーしてからステートをクリアする
+    // これにより、非同期処理中にユーザーが次の操作を行っても影響を受けません。
     const imageToSend = currentImageBase64;
     const mimeToSend = currentImageMimeType;
     
     console.log('[handleChatAI] Image data copied:', imageToSend ? `${imageToSend.length} chars` : 'null');
     
-    // Clear Input
+    // 入力欄とプレビューのクリア
     memoInput.value = '';
     memoInput.dispatchEvent(new Event('input'));
-    
-    // Clear preview AFTER copying data
     clearPreviewImage();
     
-    // 2. Determine Model (Visual Indication)
+    // 2. 使用するAIモデルの決定
+    // ユーザーが明示的に選択していない場合、画像ありならVisionモデル、なしならテキストモデルを自動選択します。
     const hasImage = !!imageToSend;
     let modelToUse = currentModel;
     if (!modelToUse) {
         modelToUse = hasImage ? defaultMultimodalModel : defaultTextModel;
     }
     
-    // Get model display name with provider prefix
+    // UI表示用モデル名の取得
     const modelInfo = availableModels.find(m => m.id === modelToUse);
     const modelDisplay = modelInfo 
         ? `[${modelInfo.provider}] ${modelInfo.name}`
         : (modelToUse || 'Auto');
 
-    // 3. Show State
+    // 3. 処理状態の更新 (State Indication)
     updateState('🔄', `AI分析中... (${modelDisplay})`, {
         model: modelToUse,
         hasImage: hasImage,
@@ -674,22 +693,23 @@ async function handleChatAI() {
     try {
         const systemPrompt = currentSystemPrompt || DEFAULT_SYSTEM_PROMPT;
         
-        // Page Reference (from Settings Menu)
+        // 「ページを参照」機能: オプションでターゲットの内容をコンテキストに含める
         const referenceToggle = document.getElementById('referencePageToggle');
         let referenceContext = '';
         if (referenceToggle && referenceToggle.checked && currentTargetId) {
             referenceContext = await fetchAndTruncatePageContent(currentTargetId, currentTargetType);
         }
 
+        // ペイロードの構築
         const payload = {
             text: text,
             target_id: currentTargetId,
             system_prompt: systemPrompt,
-            session_history: chatSession.slice(0, -1).slice(-10),
+            session_history: chatSession.slice(0, -1).slice(-10), // 直近10件のみ送信
             reference_context: referenceContext,
             image_data: imageToSend,
             image_mime_type: mimeToSend,
-            model: currentModel // Send explicit selection or null (auto)
+            model: currentModel // 自動選択の場合はnullを送る
         };
         
         updateState('📡', 'サーバーに送信中...', { step: 'uploading' });
@@ -699,6 +719,7 @@ async function handleChatAI() {
             image_data: payload.image_data ? `(${payload.image_data.length} chars)` : null
         });
         
+        // 4. APIリクエスト
         const res = await fetch('/api/chat', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -715,12 +736,12 @@ async function handleChatAI() {
         
         const data = await res.json();
         
-        // Update Cost
+        // コスト情報の更新
         if (data.cost) {
             updateSessionCost(data.cost);
         }
         
-        // Update State with provider prefix
+        // ステート更新（完了）
         const completedModelInfo = availableModels.find(m => m.id === data.model);
         const completedDisplay = completedModelInfo 
             ? `[${completedModelInfo.provider}] ${completedModelInfo.name}`
@@ -731,7 +752,7 @@ async function handleChatAI() {
             cost: data.cost
         });
         
-        // Add AI Message
+        // 5. AIメッセージの表示
         if (data.message) {
             const modelInfo = {
                 model: data.model,
@@ -742,6 +763,8 @@ async function handleChatAI() {
             chatSession.push({role: 'assistant', content: data.message});
         }
         
+        // 6. 抽出されたプロパティのフォーム反映
+        // AIがJSONでプロパティを返した場合、自動的にフォームに入力します。
         if (data.properties) {
             fillForm(data.properties);
         }
@@ -902,16 +925,17 @@ async function fetchAndTruncatePageContent(targetId, targetType) {
     }
 }
 
-// --- プロパティUI ---
+// --- プロパティUI (Dynamic Property Forms) ---
 
 function renderDynamicForm(container, schema) {
     container.innerHTML = '';
     
-    // **重要**: 逆順で表示
+    // **重要**: 逆順で表示 (Reverse Order)
+    // Notionのプロパティは通常、重要なものが最後（または最初）に来る傾向があるため、逆順に表示してUIの見栄えを調整しています。
     const entries = Object.entries(schema).reverse();
     
     for (const [name, prop] of entries) {
-        // システムプロパティはスキップ
+        // Notionが自動管理するシステムプロパティは編集不要なのでスキップします。
         if (['created_time', 'last_edited_time', 'created_by', 'last_edited_by'].includes(prop.type)) {
             continue;
         }
@@ -926,6 +950,7 @@ function renderDynamicForm(container, schema) {
         
         let input;
         
+        // プロパティタイプに応じた入力フォームの生成
         if (prop.type === 'select' || prop.type === 'multi_select') {
             input = document.createElement('select');
             input.className = 'prop-input';
@@ -936,13 +961,13 @@ function renderDynamicForm(container, schema) {
                 input.multiple = true;
             }
             
-            // 空のオプション
+            // 空のオプション (デフォルト)
             const def = document.createElement('option');
             def.value = "";
             def.textContent = "(未選択)";
             input.appendChild(def);
             
-            // スキーマのオプション
+            // Notionスキーマに定義されている固定オプションを追加
             (prop[prop.type].options || []).forEach(o => {
                 const opt = document.createElement('option');
                 opt.value = o.name;
@@ -963,7 +988,7 @@ function renderDynamicForm(container, schema) {
             input.dataset.key = name;
             input.dataset.type = prop.type;
         } else {
-            // text, title, rich_text, number, url, etc.
+            // その他のテキスト系プロパティ (text, title, rich_text, number, url 等)
             input = document.createElement('input');
             input.type = 'text';
             input.className = 'prop-input';
@@ -975,11 +1000,12 @@ function renderDynamicForm(container, schema) {
         container.appendChild(wrapper);
     }
     
-    // 動的タグサジェストを更新
+    // 過去のデータから動的にタグ候補を追加
     updateDynamicSelectOptions();
 }
 
 function updateDynamicSelectOptions() {
+    // プレビューデータ（過去の登録データ）がない場合は何もしない
     if (!currentPreviewData || !currentPreviewData.rows) return;
     
     // 全てのselect/multi_select要素を取得
@@ -991,12 +1017,12 @@ function updateDynamicSelectOptions() {
         
         if (!propName || (propType !== 'select' && propType !== 'multi_select')) return;
         
-        // プレビューデータから既存の値を抽出
+        // プレビューデータから既存の値を抽出してSetに格納（重複排除）
         const existingValues = new Set();
         currentPreviewData.rows.forEach(row => {
             const value = row[propName];
             if (value && value.trim()) {
-                // カンマ区切りの値を分割（multi_select用）
+                // multi_selectの場合、APIからはカンマ区切り文字列で返ってくることがあるため分割
                 if (value.includes(',')) {
                     value.split(',').forEach(v => existingValues.add(v.trim()));
                 } else {
@@ -1005,18 +1031,18 @@ function updateDynamicSelectOptions() {
             }
         });
         
-        // スキーマのオプションを取得
+        // スキーマに既に定義されているオプションも確認
         const schemaOptions = new Set();
         Array.from(select.options).forEach(opt => {
             if (opt.value) schemaOptions.add(opt.value);
         });
         
-        // データから抽出した値をオプションに追加
+        // スキーマにはないが、過去データには存在する値（Ad-hocなタグなど）をオプションに追加
         existingValues.forEach(value => {
             if (!schemaOptions.has(value)) {
                 const opt = document.createElement('option');
                 opt.value = value;
-                opt.textContent = value + ' (データから)';
+                opt.textContent = value + ' (データから)'; // ユーザーに由来がわかるように表示
                 select.appendChild(opt);
             }
         });
@@ -1060,6 +1086,8 @@ function fillForm(properties) {
 
 
 
+// --- プレビュー表示関数 (Content Rendering) ---
+
 function renderDatabaseTable(data, container) {
     if (!container) container = document.getElementById('contentModalPreview');
     container.innerHTML = '';
@@ -1069,7 +1097,8 @@ function renderDatabaseTable(data, container) {
         return;
     }
     
-    // Sort columns to put "Title" or "Name" first if possible
+    // カラムの並び替え (Column Sorting)
+    // "Title" や "Name" などの主要なカラムを左側に表示し、可読性を向上させます。
     const sortedCols = [...data.columns].sort((a, b) => {
         const aLow = a.toLowerCase();
         const bLow = b.toLowerCase();
@@ -1078,10 +1107,12 @@ function renderDatabaseTable(data, container) {
         return 0;
     });
 
+    // 簡易的なHTMLテーブルとしてレンダリング
     let html = '<div class="notion-table-wrapper"><table class="notion-table"><thead><tr>';
     sortedCols.forEach(col => html += `<th>${col}</th>`);
     html += '</tr></thead><tbody>';
     
+    // 最新のデータを10件まで表示
     data.rows.forEach(row => {
         html += '<tr>';
         sortedCols.forEach(col => html += `<td>${row[col] || ''}</td>`);
@@ -1101,6 +1132,8 @@ function renderPageBlocks(blocks, container) {
         return;
     }
     
+    // Notionのブロックを簡易的なHTML要素に変換して表示
+    // 現在はプレーンテキストとして表示していますが、必要に応じてMarkdownレンダリングなどを追加可能です。
     blocks.forEach(block => {
         const div = document.createElement('div');
         div.className = `notion-block notion-${block.type}`;
@@ -1111,11 +1144,16 @@ function renderPageBlocks(blocks, container) {
 
 // --- ユーティリティ & キャッシュ & サーバー通信 ---
 
+// --- ユーティリティ & キャッシュ & サーバー通信 (Utils & Caching) ---
+
+// レスポンスをローカルストレージにキャッシュするラッパー関数
+// 頻繁なAPIコールを防ぎ、UXを改善するために使用します。
 async function fetchWithCache(url, key) {
     const cached = localStorage.getItem(key);
     if (cached) {
         try {
             const entry = JSON.parse(cached);
+            // 有効期限内であればキャッシュを返す
             if (Date.now() - entry.timestamp < CACHE_TTL) {
                 console.log(`[Cache Hit] ${key}`);
                 return entry.data;
@@ -1135,6 +1173,7 @@ async function fetchWithCache(url, key) {
         
         const data = await res.json();
         
+        // 新しいデータをキャッシュに保存
         localStorage.setItem(key, JSON.stringify({
             timestamp: Date.now(),
             data: data
@@ -1150,6 +1189,7 @@ async function fetchWithCache(url, key) {
 async function loadTargets(selector) {
     selector.innerHTML = '<option disabled selected>読み込み中...</option>';
     try {
+        // ターゲットリスト取得（キャッシュ有効）
         const data = await fetchWithCache('/api/targets', TARGETS_CACHE_KEY);
         renderTargetOptions(selector, data.targets);
     } catch(e) {
@@ -1164,6 +1204,7 @@ function renderTargetOptions(selector, targets) {
     const lastSelected = localStorage.getItem(LAST_TARGET_KEY);
     
     // 新規作成オプションを追加
+    // このオプションが選択された場合、モーダルを表示するロジックが発火します。
     const newPageOpt = document.createElement('option');
     newPageOpt.value = '__NEW_PAGE__';
     newPageOpt.textContent = '➕ 新規作成';
@@ -1186,10 +1227,12 @@ function renderTargetOptions(selector, targets) {
         selector.appendChild(opt);
     });
     
-    // Trigger initial change to render form
+    // 初期選択があれば反映してフォームをレンダリング
     if (selector.value && selector.value !== '__NEW_PAGE__') handleTargetChange(selector.value);
 }
 
+// ターゲット変更時のハンドラ
+// スキーマ情報の取得とUIの更新を行います。
 async function handleTargetChange(targetId) {
     if (!targetId) return;
     currentTargetId = targetId;
@@ -1210,13 +1253,14 @@ async function handleTargetChange(targetId) {
     if (viewContentBtn) viewContentBtn.disabled = false;
     
     try {
+        // スキーマ取得（キャッシュ有効）
         const data = await fetchWithCache(`/api/schema/${targetId}`, SCHEMA_CACHE_PREFIX + targetId);
         currentSchema = data.schema;
         
-        // Form generation
+        // 動的フォームの生成
         renderDynamicForm(formContainer, currentSchema);
         
-        // Show properties only for databases
+        // ターゲットタイプに応じたUI制御
         const propsSection = document.getElementById('propertiesSection');
         const propsContainer = document.getElementById('propertiesContainer');
         if (currentTargetType === 'database') {
@@ -1225,16 +1269,16 @@ async function handleTargetChange(targetId) {
             if (propsSection) propsSection.classList.add('hidden');
         } else {
             // ページの場合は属性セクション全体を非表示
+            // ページには構造化されたプロパティがないためです。
             if (propsContainer) propsContainer.style.display = 'none';
         }
         
-        // Initialize prompt
+        // システムプロンプトの初期化
         try {
-            // localStorageから取得
+            // localStorageからカスタムプロンプトを取得
             const promptKey = `${LOCAL_PROMPT_PREFIX}${targetId}`;
             currentSystemPrompt = localStorage.getItem(promptKey) || null;
             
-            // 古いサーバーAPIコードは削除
         } catch (e) {
             console.error("Prompt load failed:", e);
             currentSystemPrompt = null;
@@ -1344,7 +1388,7 @@ function showToast(msg) {
     setTimeout(() => toast.classList.add('hidden'), 3000);
 }
 
-// --- SystemPrompt編集機能 ---
+// --- SystemPrompt編集機能 (System Prompt Management) ---
 
 function openPromptModal() {
     if (!currentTargetId) {
@@ -1361,11 +1405,11 @@ function openPromptModal() {
     // ターゲット名を表示
     targetNameSpan.textContent = currentTargetName;
     
-    // Check if custom prompt exists in localStorage
+    // カスタムプロンプトの有無を確認 (localStorage)
     const promptKey = `${LOCAL_PROMPT_PREFIX}${currentTargetId}`;
     const savedPrompt = localStorage.getItem(promptKey);
     
-    // Show/hide reset button based on whether custom prompt exists
+    // カスタム設定がある場合のみリセットボタンを表示
     if (resetBtn) {
         if (savedPrompt) {
             resetBtn.classList.remove('hidden');
@@ -1374,7 +1418,7 @@ function openPromptModal() {
         }
     }
     
-    // Display current prompt or default
+    // 現在のプロンプトまたはデフォルトを表示
     textarea.value = currentSystemPrompt || DEFAULT_SYSTEM_PROMPT;
     textarea.disabled = false;
     saveBtn.disabled = false;
@@ -1399,24 +1443,24 @@ async function saveSystemPrompt() {
     saveBtn.disabled = true;
     
     try {
-        // Only save to localStorage if different from default
+        // デフォルトと異なる場合のみlocalStorageに保存
         const promptKey = `${LOCAL_PROMPT_PREFIX}${currentTargetId}`;
         
         if (newPrompt && newPrompt !== DEFAULT_SYSTEM_PROMPT) {
-            // Save custom prompt
+            // カスタムプロンプトを保存
             localStorage.setItem(promptKey, newPrompt);
             currentSystemPrompt = newPrompt;
             
-            // Show reset button
+            // リセットボタンを表示
             if (resetBtn) {
                 resetBtn.classList.remove('hidden');
             }
         } else {
-            // Remove custom prompt (use default)
+            // デフォルトと同じならカスタム設定を削除
             localStorage.removeItem(promptKey);
             currentSystemPrompt = null;
             
-            // Hide reset button
+            // リセットボタンを隠す
             if (resetBtn) {
                 resetBtn.classList.add('hidden');
             }
@@ -1436,16 +1480,16 @@ function resetSystemPrompt() {
     if (!currentTargetId) return;
     
     const promptKey = `${LOCAL_PROMPT_PREFIX}${currentTargetId}`;
-    localStorage.removeItem(promptKey);
+    localStorage.removeItem(promptKey); // 設定を削除
     currentSystemPrompt = null;
     
-    // Update textarea to show default
+    // テキストエリアをデフォルトに戻す
     const textarea = document.getElementById('promptTextarea');
     if (textarea) {
         textarea.value = DEFAULT_SYSTEM_PROMPT;
     }
     
-    // Hide reset button
+    // リセットボタンを隠す
     const resetBtn = document.getElementById('resetPromptBtn');
     if (resetBtn) {
         resetBtn.classList.add('hidden');
@@ -1531,7 +1575,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// --- 新規ページ作成機能 ---
+// --- 新規ページ作成機能 (New Page Creation) ---
 
 function openNewPageModal() {
     const modal = document.getElementById('newPageModal');
@@ -1558,6 +1602,7 @@ async function createNewPage() {
     setLoading(true, '新規ページ作成中...');
     
     try {
+        // APIを呼び出してページを作成
         const res = await fetch('/api/pages/create', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -1575,11 +1620,12 @@ async function createNewPage() {
         closeNewPageModal();
         
         // キャッシュをクリアしてターゲットリストをリロード
+        // これにより、新しいページがドロップダウンリストにすぐに表示されます。
         localStorage.removeItem(TARGETS_CACHE_KEY);
         const appSelector = document.getElementById('appSelector');
         await loadTargets(appSelector);
         
-        // 新規作成したページを選択
+        // 新規作成したページを自動選択
         if (newPage.id) {
             appSelector.value = newPage.id;
             await handleTargetChange(newPage.id);
@@ -1592,7 +1638,7 @@ async function createNewPage() {
     }
 }
 
-// --- ページ内容モーダル機能 ---
+// --- ページ内容モーダル機能 (Content Viewer) ---
 
 function openContentModal() {
     if (!currentTargetId) {
@@ -1603,6 +1649,7 @@ function openContentModal() {
     const modal = document.getElementById('contentModal');
     
     // タイトルをNotionリンクに変更
+    // タイトルをクリックすると実際のNotionページが開くようにUXを改善しています。
     const titleEl = document.getElementById('contentModalTitle');
     if (titleEl && currentTargetId) {
         const notionUrl = `https://www.notion.so/${currentTargetId.replace(/-/g, '')}`;
@@ -1645,7 +1692,7 @@ async function fetchAndDisplayContentInModal(targetId, targetType) {
             currentPreviewData = data;  // タグサジェスト用に保存
             renderDatabaseTable(data, container);
             container.classList.add('database-view');
-            updateDynamicSelectOptions();  // タグサジェストを更新
+            updateDynamicSelectOptions();  // 取得したデータに基づいてフォームの選択肢を更新
         } else {
             renderPageBlocks(data.blocks, container);
             container.classList.remove('database-view');
@@ -1655,7 +1702,7 @@ async function fetchAndDisplayContentInModal(targetId, targetType) {
     }
 }
 
-// --- New Features (Settings, Models, State) ---
+// --- 新機能: 設定、モデル選択、ステート表示 (New Features) ---
 
 function toggleSettingsMenu() {
     const menu = document.getElementById('settingsMenu');
@@ -1669,17 +1716,17 @@ async function loadAvailableModels() {
         
         const data = await res.json();
         
-        // Categorize models
+        // モデルの分類とデフォルト設定
         availableModels = data.all || [];
         textOnlyModels = data.text_only || [];
         visionModels = data.vision_capable || [];
         defaultTextModel = data.defaults?.text;
         defaultMultimodalModel = data.defaults?.multimodal;
         
-        // Load user's last selection or use default (null for auto)
+        // ユーザーの前回の選択を復元（なければ自動選択）
         currentModel = localStorage.getItem('memo_ai_selected_model') || null;
         
-        // Validate that the stored model is still available
+        // 保存されていたモデルが現在も有効か確認
         if (currentModel) {
             const isValid = availableModels.some(m => m.id === currentModel);
             if (!isValid) {
@@ -1700,7 +1747,7 @@ async function loadAvailableModels() {
 function openModelModal() {
     const modal = document.getElementById('modelModal');
     
-    // Initialize temp state with current committed state
+    // 一時変数に現在の設定をコピー（キャンセル機能のため）
     tempSelectedModel = currentModel;
     
     renderModelList();
@@ -1711,7 +1758,7 @@ function renderModelList() {
     const modelList = document.getElementById('modelList');
     modelList.innerHTML = '';
     
-    // Resolve full model info for defaults
+    // デフォルトモデルの解決
     const textModelInfo = availableModels.find(m => m.id === defaultTextModel);
     const visionModelInfo = availableModels.find(m => m.id === defaultMultimodalModel);
     
@@ -1722,7 +1769,7 @@ function renderModelList() {
         ? `[${visionModelInfo.provider}] ${visionModelInfo.name}`
         : (defaultMultimodalModel || 'Unknown');
 
-    // Auto Option (Recommended)
+    // 自動選択オプション (推奨)
     const autoItem = document.createElement('div');
     autoItem.className = 'model-item';
     if (tempSelectedModel === null) autoItem.classList.add('selected');
@@ -1739,13 +1786,13 @@ function renderModelList() {
     autoItem.onclick = () => selectTempModel(null);
     modelList.appendChild(autoItem);
 
-    // Separator
+    // 区切り線
     const separator = document.createElement('div');
     separator.style.borderBottom = '1px solid var(--border-color)';
     separator.style.margin = '8px 0';
     modelList.appendChild(separator);
 
-    // Single Unified List
+    // モデル一覧
     availableModels.forEach(model => {
         modelList.appendChild(createModelItem(model));
     });
@@ -1758,12 +1805,13 @@ function createModelItem(model) {
     const isSelected = model.id === tempSelectedModel;
     if (isSelected) item.classList.add('selected');
     
-    // Vision Indicator
+    // Vision対応アイコン
     const visionIcon = model.supports_vision ? ' 📷' : '';
     
-    // Format: [Provider] model-name [📷]
+    // [Provider] モデル名 [📷]
     const displayName = `[${model.provider}] ${model.name}${visionIcon}`;
     
+    // レートリミット注意書き
     const rateLimitBadge = model.rate_limit_note 
         ? `<div class="model-badge warning">⚠️ ${model.rate_limit_note}</div>` 
         : '';
@@ -1788,6 +1836,7 @@ function selectTempModel(modelId) {
 function saveModelSelection() {
     currentModel = tempSelectedModel;
     
+    // localStorageに保存
     if (currentModel) {
         localStorage.setItem('memo_ai_selected_model', currentModel);
     } else {
@@ -1810,7 +1859,8 @@ function updateSessionCost(cost) {
     }
 }
 
-// State Display Logic
+// --- ステート表示ロジック (State Display Logic) ---
+// AI処理の進行状況をアイコンとテキストでユーザーにフィードバックします。
 let currentState = null;
 
 function showState(icon, text, details = null) {
@@ -1830,9 +1880,9 @@ function showState(icon, text, details = null) {
     }
     
     stateDisplay.classList.remove('hidden');
-    stateDetails.classList.add('hidden'); // Default collapsed
+    stateDetails.classList.add('hidden'); // デフォルトでは詳細は折りたたむ
     
-    // Toggle handler
+    // トグルハンドラ
     const toggle = document.getElementById('stateToggle');
     toggle.onclick = (e) => {
         e.stopPropagation();
@@ -1843,7 +1893,7 @@ function showState(icon, text, details = null) {
 function updateState(icon, text, details = null) {
     showState(icon, text, details);
     
-    // If success/completed, hide after delay
+    // 成功・完了時は数秒後に自動的に非表示にする
     if (icon === '✅') {
         setTimeout(() => {
             document.getElementById('stateDisplay').classList.add('hidden');

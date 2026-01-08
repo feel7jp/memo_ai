@@ -4,6 +4,7 @@ import httpx
 from typing import Dict, List, Optional, Any
 
 # Notion API Configuration
+# Notion APIのバージョンを指定（破壊的変更が多いため固定推奨）
 NOTION_VERSION = "2022-06-28"
 BASE_URL = "https://api.notion.com/v1"
 
@@ -16,7 +17,17 @@ async def safe_api_call(
     **kwargs
 ):
     """
-    Robust API wrapper with exponential backoff retry.
+    堅牢なAPIラッパー関数
+    
+    リトライロジック（指数バックオフ）とエラーハンドリングを内蔵し、
+    ネットワークの不安定さやNotion APIの一時的なエラーに強い設計になっています。
+    
+    Args:
+        method (str): HTTPメソッド (GET, POST等)
+        endpoint (str): APIエンドポイント (例: "pages/xxx")
+        ignore_errors (List[int]): 無視してNoneを返すステータスコードのリスト
+        max_retries (int): 最大リトライ回数
+        timeout (float): タイムアウト秒数
     """
     api_key = os.environ.get("NOTION_API_KEY")
     if not api_key:
@@ -30,21 +41,23 @@ async def safe_api_call(
     
     url = f"{BASE_URL}/{endpoint}"
     
+    # リトライループ
     for attempt in range(max_retries):
         try:
             async with httpx.AsyncClient(timeout=timeout) as client:
-                await asyncio.sleep(0.35)  # Rate limit prevention
+                # レート制限対策として少し待機
+                await asyncio.sleep(0.35) 
                 
                 response = await client.request(method, url, headers=headers, **kwargs)
                 
-                # Handle rate limiting
+                # HTTP 429 (Too Many Requests) のハンドリング
                 if response.status_code == 429:
                     retry_after = int(response.headers.get("Retry-After", 2))
                     print(f"Rate limited, waiting {retry_after}s...")
                     await asyncio.sleep(retry_after)
                     continue
                 
-                # Check ignored errors
+                # 指定されたエラーコードの場合、例外を投げずにNoneを返す（例：404 Not Foundを許容する場合など）
                 if ignore_errors and response.status_code in ignore_errors:
                     return None
                 
@@ -53,7 +66,8 @@ async def safe_api_call(
                 
         except httpx.ReadTimeout:
             if attempt < max_retries - 1:
-                backoff = 2 ** attempt  # Exponential: 1s, 2s, 4s
+                # 指数バックオフ: 1秒, 2秒, 4秒... と待機時間を倍にしていく
+                backoff = 2 ** attempt
                 print(f"Timeout on {endpoint}, retry {attempt + 1}/{max_retries} after {backoff}s")
                 await asyncio.sleep(backoff)
             else:
@@ -72,8 +86,8 @@ async def safe_api_call(
         except httpx.HTTPStatusError as e:
             status = e.response.status_code
             print(f"HTTP {status} on {method} {endpoint}")
+            # 500系エラーはサーバー側の問題なのでリトライする価値がある
             if status >= 500 and attempt < max_retries - 1:
-                # Retry server errors
                 backoff = 2 ** attempt
                 print(f"Server error, retry {attempt + 1}/{max_retries} after {backoff}s")
                 await asyncio.sleep(backoff)
@@ -90,15 +104,20 @@ async def safe_api_call(
 
 async def get_page_info(page_id: str) -> Optional[Dict[str, Any]]:
     """
-    Fetches details of a specific page.
+    ページの基本情報を取得
+    
+    プロパティ情報や親ページのIDなどを取得するために使用します。
     """
     return await safe_api_call("GET", f"pages/{page_id}")
             
 async def fetch_config_db(config_db_id: str) -> List[Dict[str, str]]:
     """
-    Fetches configuration from the Notion Config Database.
+    設定データベースから設定情報を一括取得
+    
+    Notion上の「設定用データベース」から、ターゲットID、プロンプト、名前などの設定を読み込みます。
+    これにより、アプリケーションの再デプロイなしでアシスタントの挙動を変更できます。
     """
-    # Use POST /databases/{id}/query
+    # データベースクエリ（全件検索）
     response = await safe_api_call("POST", f"databases/{config_db_id}/query")
     if not response:
         return []
@@ -107,7 +126,7 @@ async def fetch_config_db(config_db_id: str) -> List[Dict[str, str]]:
     for page in response.get("results", []):
         try:
             props = page["properties"]
-            # Extract plain text from various types robustly
+            # プロパティ値の抽出ヘルパー（型安全にテキストを取得）
             def get_text(p):
                 if not p: return ""
                 t_type = p.get("type")
@@ -121,7 +140,7 @@ async def fetch_config_db(config_db_id: str) -> List[Dict[str, str]]:
             target_id = get_text(props.get("TargetDB_ID"))
             prompt = get_text(props.get("SystemPrompt"))
             
-            if not name: continue # Drop invalid entries
+            if not name: continue # 名前がないレコードは無視
             
             configs.append({
                 "name": name,
@@ -134,10 +153,13 @@ async def fetch_config_db(config_db_id: str) -> List[Dict[str, str]]:
 
 async def get_db_schema(target_db_id: str) -> Dict[str, Any]:
     """
-    Fetches the schema (properties) of the target database.
+    データベースのスキーマ（プロパティ定義）を取得
+    
+    AIが正確なJSON構造を生成するために、対象データベースのカラム一覧（型情報含む）を取得します。
     """
-    # Use GET /databases/{id}
-    # Ignore 400 because if it's a Page ID, Notion returns 400.
+    # データベースメタデータの取得
+    # IDがページIDだった場合、Notionは400を返すが、ここではエラーとして扱わずに例外処理側で判定させるために400を無視設定に入れています。
+    # （呼び出し元で is None チェックをしている場合があるため）
     response = await safe_api_call("GET", f"databases/{target_db_id}", ignore_errors=[400])
     if response is None:
         raise ValueError("Not a database")
@@ -146,9 +168,11 @@ async def get_db_schema(target_db_id: str) -> Dict[str, Any]:
 
 async def fetch_recent_pages(target_db_id: str, limit: int = 3) -> List[Dict[str, Any]]:
     """
-    Fetches recent pages from the target database for Few-shot examples.
+    最新の登録データを取得 (Few-shot学習用)
+    
+    直近に作成されたデータを取得し、AIに「どのような形式でデータが登録されているか」の例として提示します。
     """
-    # Use POST /databases/{id}/query
+    # データベースクエリ（作成日時順の降順）
     body = {
         "page_size": limit,
         "sorts": [{"timestamp": "created_time", "direction": "descending"}]
@@ -164,13 +188,19 @@ async def fetch_recent_pages(target_db_id: str, limit: int = 3) -> List[Dict[str
 
 async def create_page(target_db_id: str, properties: Dict[str, Any]) -> str:
     """
-    Creates a new page in the target database.
+    指定されたデータベースに新しいページを作成
+    
+    Args:
+        target_db_id (str): 親データベースのID
+        properties (Dict): 登録するプロパティ値
+    Returns:
+        str: 新しく作成されたページのNotion URL
     """
     body = {
         "parent": {"database_id": target_db_id},
         "properties": properties
     }
-    # Use POST /pages
+    
     response = await safe_api_call("POST", "pages", json=body)
     if response and "url" in response:
         return response["url"]
@@ -181,8 +211,9 @@ async def create_page(target_db_id: str, properties: Dict[str, Any]) -> str:
 
 async def search_child_database(parent_page_id: str, title_query: str) -> Optional[Dict[str, Any]]:
     """
-    Searches for a database with a specific title under a parent page.
-    Uses fetch_children_list.
+    親ページ配下のデータベースをタイトル検索
+    
+    指定された親ページ直下にある「子データベース」の中から、タイトルが完全一致するものを探します。
     """
     children = await fetch_children_list(parent_page_id)
     
@@ -198,19 +229,22 @@ async def search_child_database(parent_page_id: str, title_query: str) -> Option
 
 async def fetch_children_list(parent_page_id: str, limit: int = 100) -> List[Dict[str, Any]]:
     """
-    Fetches the children blocks of a page/block.
-    Useful for discovering Pages and Databases under the Root Page.
+    ページ内ブロック（子要素）の一覧取得
+    
+    ターゲット選択画面でルートページ以下のコンテンツを表示したり、ページの内容を読み取るために使用します。
     """
     response = await safe_api_call("GET", f"blocks/{parent_page_id}/children?page_size={limit}")
     if not response:
         return []
     results = response.get("results", [])
-    # Filter out archived (deleted) blocks
+    # 削除済み（アーカイブ）のブロックは除外して返します
     return [b for b in results if not b.get("archived")]
 
 async def create_database(parent_page_id: str, title: str, properties: Dict[str, Any]) -> str:
     """
-    Creates a new database under the specified parent page.
+    新規データベースの作成
+    
+    初期セットアップ時などに、設定ファイルやログ保存用のデータベースを自動生成するために使用します。
     """
     body = {
         "parent": {
@@ -237,12 +271,14 @@ async def create_database(parent_page_id: str, title: str, properties: Dict[str,
 
 async def append_block(page_id: str, content: str) -> bool:
     """
-    Appends a paragraph block to a page.
-    Handles text > 2000 characters by chunking.
+    ページ末尾へのテキストブロック追加
+    
+    長文（2000文字以上）に対応しており、自動的に適切なサイズに分割してNotionに送信します。
     """
     MAX_CHARS = 2000
     
-    # Chunk the content
+    # コンテンツの分割（Chunking）
+    # Pythonのスライス機能を使って2000文字ごとのリストを作成
     chunks = [content[i:i+MAX_CHARS] for i in range(0, len(content), MAX_CHARS)]
     
     children = []
@@ -255,11 +291,8 @@ async def append_block(page_id: str, content: str) -> bool:
             }
         })
     
-    # Notion API allows up to 100 blocks in one request.
-    # If we somehow have massive content (>200k chars), we might need batching logic here too.
-    # But for now, just sending 'children' list is likely fine for normal AI responses.
-    
-    # We can batch by 100 blocks just to be safe
+    # Notion APIの制限への対応
+    # 1回のリクエストで送信できるブロック数は最大100個までです。
     BATCH_SIZE = 100
     success = True
     
@@ -273,12 +306,16 @@ async def append_block(page_id: str, content: str) -> bool:
 
 async def query_database(database_id: str, limit: int = 20) -> List[Dict[str, Any]]:
     """
-    Queries a database for its entries.
+    データベースのクエリ実行
+    
+    最終更新日時の降順でソートしてデータを取得します。
+    データベースコンテンツのプレビュー用などに使用されます。
     """
     body = {
         "page_size": limit,
         "sorts": [{"timestamp": "last_edited_time", "direction": "descending"}]
     }
+    # データベース検索は時間がかかることがあるため、タイムアウトを60秒に延長
     response = await safe_api_call("POST", f"databases/{database_id}/query", json=body, timeout=60.0)
     if not response:
         return []

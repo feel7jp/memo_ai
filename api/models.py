@@ -1,7 +1,8 @@
 """
 AI Model Definitions and Selection Logic
-Manages model metadata and intelligent model selection
-Dynamically fetches available models from LiteLLM
+AIモデルのメタデータ管理とインテリジェントな自動選択ロジックを提供します。
+LiteLLMから利用可能なモデル情報を動的に取得し、APIキーの設定状況に基づいて
+実際に使用可能なモデルをフィルタリングします。
 """
 from typing import List, Dict, Any, Optional
 import litellm
@@ -11,21 +12,22 @@ from api.config import (
     DEFAULT_MULTIMODAL_MODEL
 )
 
-# Cache for model registry
+# モデルレジストリのキャッシュ (初回構築後に再利用)
 _MODEL_CACHE = None
 
 def _build_model_registry() -> List[Dict[str, Any]]:
     """
-    Builds model registry from LiteLLM's model_cost dictionary.
-    Automatically detects and separates providers (Gemini API vs Vertex AI).
+    LiteLLMの `model_cost` 辞書からモデルレジストリを構築します。
+    プロバイダーの種類（Gemini API vs Vertex AIなど）を自動検出し、
+    フロントエンドで表示しやすい形式に整形します。
     """
     registry = []
     
-    # Get LiteLLM's model cost map
+    # LiteLLMが持つ全モデルのメタデータ（コスト、プロバイダー情報など）を取得
     model_cost_map = litellm.model_cost
     
-    # Provider display name mapping
-    # Maps LiteLLM provider names to human-readable display names
+    # プロバイダー表示名のマッピング
+    # 内部IDをユーザーフレンドリーな名称に変換します。
     PROVIDER_DISPLAY_NAMES = {
         "gemini": "Gemini API",
         "vertex_ai": "Vertex AI", 
@@ -36,12 +38,12 @@ def _build_model_registry() -> List[Dict[str, Any]]:
         "anthropic": "Anthropic",
     }
     
-    # Iterate through ALL models in LiteLLM's registry
+    # LiteLLMのレジストリに含まれる全モデルを走査
     for model_id, model_info in model_cost_map.items():
-        # Get provider from LiteLLM metadata
+        # メタデータからプロバイダーIDを取得
         litellm_provider = model_info.get("litellm_provider")
         
-        # Auto-detect provider from model_id if not in metadata
+        # メタデータにない場合、モデルIDからプロバイダーを推測
         if not litellm_provider:
             if model_id.startswith("gemini/"):
                 litellm_provider = "gemini"
@@ -52,19 +54,19 @@ def _build_model_registry() -> List[Dict[str, Any]]:
             elif model_id.startswith("anthropic/") or model_id.startswith("claude"):
                 litellm_provider = "anthropic"
             else:
-                # Skip unknown providers
+                # 未知のプロバイダーはスキップ
                 continue
         
-        # Only include providers we have display names for
+        # 表示名が定義されている主要プロバイダーのみリストに含める
         if litellm_provider not in PROVIDER_DISPLAY_NAMES:
             continue
         
         provider_display = PROVIDER_DISPLAY_NAMES[litellm_provider]
         
-        # Determine capabilities from LiteLLM metadata
+        # Vision（画像認識）機能の対応可否を判定
         supports_vision = model_info.get("supports_vision", False)
         
-        # Fallback: Check model name for known vision model patterns
+        # LiteLLMのメタデータで判定できない場合のフォールバック（モデル名パターンマッチング）
         if not supports_vision:
             vision_patterns = [
                 "gpt-4o", "gpt-4-vision",
@@ -76,19 +78,19 @@ def _build_model_registry() -> List[Dict[str, Any]]:
                     supports_vision = True
                     break
         
-        # JSON support (most modern models support this)
+        # JSONモードのサポート（最近のモデルはほぼサポート）
         supports_json = model_info.get("supports_response_schema", True)
         
-        # Get cost information
+        # コスト情報の取得（トークン単価）
         input_cost = model_info.get("input_cost_per_token", 0.0)
         output_cost = model_info.get("output_cost_per_token", 0.0)
         
-        # Build registry entry
+        # レジストリエントリの作成
         entry = {
             "id": model_id,
-            "name": model_id.split("/")[-1],  # Extract model name
-            "provider": provider_display,  # Human-readable provider name
-            "litellm_provider": litellm_provider,  # Actual LiteLLM provider for routing
+            "name": model_id.split("/")[-1],  # "gemini/gemini-pro" -> "gemini-pro"
+            "provider": provider_display,  # 表示用プロバイダー名
+            "litellm_provider": litellm_provider,  # ルーティング用プロバイダーID
             "supports_vision": supports_vision,
             "supports_json": supports_json,
             "cost_per_1k_tokens": {
@@ -97,20 +99,20 @@ def _build_model_registry() -> List[Dict[str, Any]]:
             }
         }
         
-        # Optional: Keep rate limit notes
+        # レートリミット情報の保持（もしあれば）
         if "rate_limit_note" in model_info:
             entry["rate_limit_note"] = model_info["rate_limit_note"]
         
         registry.append(entry)
     
-    # Sort by provider then name for cleaner UI
+    # UI表示順序の調整: プロバイダー名 > モデル名でソート
     registry.sort(key=lambda x: (x["provider"], x["name"]))
     
     return registry
 
 def get_model_registry() -> List[Dict[str, Any]]:
     """
-    Returns the model registry, building it on first call and caching.
+    モデルレジストリを返します。初回呼び出し時に構築を行い、以降はキャッシュを返します。
     """
     global _MODEL_CACHE
     if _MODEL_CACHE is None:
@@ -123,16 +125,15 @@ def get_model_registry() -> List[Dict[str, Any]]:
 
 def get_available_models() -> List[Dict[str, Any]]:
     """
-    Returns a list of models that have configured credentials.
-    Only returns models whose provider has valid authentication.
-    Uses litellm_provider field to accurately check credentials.
+    設定されているAPIキー/認証情報に基づいて、現在利用可能なモデルのリストを返します。
+    `api.config.is_provider_available` を使用して、各モデルのプロバイダーが有効かチェックします。
     """
     available = []
     registry = get_model_registry()
     
     for model in registry:
-        # Use litellm_provider (e.g., "gemini", "vertex_ai") for credential check
-        # Not the display name (e.g., "Gemini API", "Vertex AI")
+        # LiteLLMのプロバイダーID (litellm_provider) を使用して認証チェックを行う
+        # 表示名 (provider) ではなく、実際のバックエンド識別子を使用する必要があります。
         litellm_provider = model.get("litellm_provider")
         
         if litellm_provider and is_provider_available(litellm_provider):
@@ -140,18 +141,18 @@ def get_available_models() -> List[Dict[str, Any]]:
     
     return available
 
-
-
 def get_models_by_capability(supports_vision: bool = None) -> List[Dict[str, Any]]:
     """
-    Returns available models filtered by capability.
+    利用可能なモデルを機能（Vision対応など）でフィルタリングして返します。
     
     Args:
-        supports_vision: If True, only vision models. If False, only text-only models.
-                        If None, all available models.
+        supports_vision: 
+            True  -> Vision対応モデルのみ
+            False -> テキスト専用モデルのみ
+            None  -> 全ての利用可能なモデル
     
     Returns:
-        List of model metadata dictionaries
+        フィルタリングされたモデルのメタデータリスト
     """
     models = get_available_models()
     
@@ -163,13 +164,14 @@ def get_models_by_capability(supports_vision: bool = None) -> List[Dict[str, Any
 
 def get_model_metadata(model_id: str) -> Optional[Dict[str, Any]]:
     """
-    Returns metadata for a specific model ID.
+    特定のモデルIDに対応するメタデータを取得します。
+    選択されたモデルの機能確認やコスト計算に使用されます。
     
     Args:
-        model_id: Model identifier (e.g., "gemini/gemini-2.5-flash")
+        model_id: モデル識別子 (例: "gemini/gemini-2.0-flash-exp")
     
     Returns:
-        Model metadata dict or None if not found
+        モデル情報の辞書、または見つからない場合はNone
     """
     registry = get_model_registry()
     for model in registry:
@@ -184,26 +186,26 @@ def select_model_for_input(
     user_selection: Optional[str] = None
 ) -> str:
     """
-    Intelligently selects the best model based on input type.
+    入力タイプに基づいて最適なモデルをインテリジェントに選択します。
     
-    Logic:
-    1. If user explicitly selected a model, use that (highest priority)
-    2. If input has image, select from vision-capable models
-    3. If text-only, select from text-only models (or default text model)
+    選択ロジック:
+    1. ユーザーが明示的にモデルを選択している場合、それを最優先します。
+    2. 画像入力がある場合、Vision対応モデルの中から選択します。
+    3. テキストのみの場合、テキストモデル（またはデフォルト）を使用します。
     
     Args:
-        has_image: Whether the input contains an image
-        user_selection: User's explicitly selected model (optional)
+        has_image: 画像データが含まれているかどうか
+        user_selection: ユーザーがフロントエンドで選択したモデルID (任意)
     
     Returns:
-        Model ID to use
+        使用すべきモデルID
     """
-    # Priority 1: User's explicit selection
+    # 優先度1: ユーザーの明示的な選択
     if user_selection:
-        # Validate that the selected model is available
+        # 選択されたモデルが現在有効か検証
         metadata = get_model_metadata(user_selection)
-        if metadata and is_provider_available(metadata["provider"]):
-            # If user selected a text-only model but input has image, warn but respect choice
+        if metadata and is_provider_available(metadata["litellm_provider"]):
+            # テキスト専用モデルに画像を送ろうとしている場合は警告を出しますが、ユーザーの意思を尊重します。
             if has_image and not metadata.get("supports_vision"):
                 print(f"WARNING: Selected model '{user_selection}' does not support images. "
                       f"This request may fail.")
@@ -212,11 +214,11 @@ def select_model_for_input(
             print(f"WARNING: Selected model '{user_selection}' is not available. "
                   f"Falling back to default.")
     
-    # Priority 2: Auto-select based on input type
+    # 優先度2: 入力タイプに基づく自動選択
     if has_image:
-        # Need a vision-capable model
+        # 画像入力を処理できるVisionモデルが必要です
         
-        # Define fallback vision models in order of preference
+        # フォールバック候補リスト（優先順）
         FALLBACK_VISION_MODELS = [
             DEFAULT_MULTIMODAL_MODEL,
             "gemini/gemini-2.0-flash-exp",
@@ -231,23 +233,23 @@ def select_model_for_input(
         if vision_models:
             vision_model_ids = [m["id"] for m in vision_models]
             
-            # Try fallback models in order
+            # フォールバックリスト順に利用可能なモデルを探す
             for fallback_model in FALLBACK_VISION_MODELS:
                 if fallback_model in vision_model_ids:
                     if fallback_model != DEFAULT_MULTIMODAL_MODEL:
                         print(f"INFO: Using fallback vision model '{fallback_model}' (default '{DEFAULT_MULTIMODAL_MODEL}' not available)")
                     return fallback_model
             
-            # If no fallback found, use first available vision model
+            # フォールバックが見つからない場合、利用可能な最初のVisionモデルを使用
             print(f"INFO: Using first available vision model '{vision_models[0]['id']}'")
             return vision_models[0]["id"]
         else:
-            raise RuntimeError("No vision-capable models available. Please configure an API key.")
+            raise RuntimeError("画像認識に対応したモデルが利用できません。APIキーの設定を確認してください。")
     
     else:
-        # Text-only input
+        # テキストのみの入力
         
-        # Define fallback models in order of preference (known stable models)
+        # フォールバック候補リスト（安定性の高いモデル順）
         FALLBACK_TEXT_MODELS = [
             DEFAULT_TEXT_MODEL,
             "gemini/gemini-2.0-flash-exp",
@@ -257,7 +259,7 @@ def select_model_for_input(
             "anthropic/claude-3-5-haiku-20241022"
         ]
         
-        # 1. Try fallback models in order
+        # 1. フォールバックリスト順に試行
         available_ids = [m["id"] for m in get_available_models()]
         for fallback_model in FALLBACK_TEXT_MODELS:
             if fallback_model in available_ids:
@@ -265,26 +267,27 @@ def select_model_for_input(
                     print(f"INFO: Using fallback model '{fallback_model}' (default '{DEFAULT_TEXT_MODEL}' not available)")
                 return fallback_model
             
-        # 2. If no fallback found, prefer text-only models
+        # 2. フォールバックがない場合、テキスト専用モデルを優先して選択
+        # 単価が安い傾向があるため
         text_models = get_models_by_capability(supports_vision=False)
         if text_models:
             print(f"INFO: Using first available text model '{text_models[0]['id']}'")
             return text_models[0]["id"]
             
-        # 3. Fallback: use any available model
+        # 3. 最終手段: 何でもいいので利用可能なモデルを使用
         if available_ids:
             print(f"INFO: Using first available model '{available_ids[0]}'")
             return available_ids[0]
         else:
-            raise RuntimeError("No AI models available. Please configure an API key.")
+            raise RuntimeError("利用可能なAIモデルがありません。APIキーの設定を確認してください。")
 
 
-# Convenience functions for frontend
+# フロントエンド向けのコンビニエンス関数
 def get_text_models() -> List[Dict[str, Any]]:
-    """Returns available text-only models"""
+    """利用可能なテキスト専用モデルのリストを返します"""
     return get_models_by_capability(supports_vision=False)
 
 
 def get_vision_models() -> List[Dict[str, Any]]:
-    """Returns available vision-capable models"""
+    """利用可能なVision対応モデルのリストを返します"""
     return get_models_by_capability(supports_vision=True)
