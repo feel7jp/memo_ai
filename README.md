@@ -38,7 +38,7 @@ python3 -m uvicorn api.index:app --reload --host 0.0.0.0
 
 ---
 
-# 🛠️ 開発者・講義向け資料 (Hack Guide)
+# 🛠️ 開発者・講義向け資料   (Hack Guide)
 
 このアプリを改造したい人向けのガイドです。
 NotionとAIをつなぐ「ステートレス」なアーキテクチャを採用しています。
