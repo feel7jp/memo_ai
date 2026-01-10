@@ -31,7 +31,7 @@ async def safe_api_call(
     """
     api_key = os.environ.get("NOTION_API_KEY")
     if not api_key:
-        raise ValueError("NOTION_API_KEY is not set")
+        raise ValueError("❌ NOTION_API_KEY が設定されていません。.envファイルに NOTION_API_KEY=your_api_key_here を追加してください。")
     
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -207,26 +207,6 @@ async def create_page(target_db_id: str, properties: Dict[str, Any]) -> str:
     
     raise Exception("Failed to create page")
 
-    return None
-
-async def search_child_database(parent_page_id: str, title_query: str) -> Optional[Dict[str, Any]]:
-    """
-    親ページ配下のデータベースをタイトル検索
-    
-    指定された親ページ直下にある「子データベース」の中から、タイトルが完全一致するものを探します。
-    """
-    children = await fetch_children_list(parent_page_id)
-    
-    for block in children:
-        if block.get("type") == "child_database":
-            db_info = block.get("child_database", {})
-            title = db_info.get("title", "")
-            
-            if title == title_query:
-                db_id = block["id"]
-                return await safe_api_call("GET", f"databases/{db_id}")
-    return None
-
 async def fetch_children_list(parent_page_id: str, limit: int = 100) -> List[Dict[str, Any]]:
     """
     ページ内ブロック（子要素）の一覧取得
@@ -239,35 +219,6 @@ async def fetch_children_list(parent_page_id: str, limit: int = 100) -> List[Dic
     results = response.get("results", [])
     # 削除済み（アーカイブ）のブロックは除外して返します
     return [b for b in results if not b.get("archived")]
-
-async def create_database(parent_page_id: str, title: str, properties: Dict[str, Any]) -> str:
-    """
-    新規データベースの作成
-    
-    初期セットアップ時などに、設定ファイルやログ保存用のデータベースを自動生成するために使用します。
-    """
-    body = {
-        "parent": {
-            "type": "page_id",
-            "page_id": parent_page_id
-        },
-        "title": [
-            {
-                "type": "text",
-                "text": {
-                    "content": title,
-                    "link": None
-                }
-            }
-        ],
-        "properties": properties
-    }
-    
-    response = await safe_api_call("POST", "databases", json=body)
-    if response and "id" in response:
-        return response["id"]
-        
-    raise Exception(f"Failed to create database '{title}'")
 
 async def append_block(page_id: str, content: str) -> bool:
     """

@@ -32,6 +32,8 @@ from api.config import DEFAULT_TEXT_MODEL, DEFAULT_MULTIMODAL_MODEL
 
 
 # 環境変数の読み込み (.envファイルの内容をロード)
+if not Path(".env").exists():
+    raise FileNotFoundError("❌ .envファイルが見つかりません。プロジェクトのルートディレクトリに .env ファイルを作成してください。")
 load_dotenv()
 
 # --- グローバル変数 ---
@@ -290,7 +292,7 @@ async def get_targets():
     """
     root_id = os.environ.get("NOTION_ROOT_PAGE_ID")
     if not root_id:
-        raise HTTPException(status_code=500, detail="NOTION_ROOT_PAGE_ID not set")
+        raise HTTPException(status_code=500, detail="❌ NOTION_ROOT_PAGE_ID が設定されていません。.envファイルに NOTION_ROOT_PAGE_ID=your_page_id を追加してください。")
     
     children = await fetch_children_list(root_id)
     targets = []
@@ -745,7 +747,7 @@ async def create_new_page(request: dict):
         root_id = os.environ.get("NOTION_ROOT_PAGE_ID")
         # ルートページIDが設定されていない場合はエラーを返します。
         if not root_id:
-            raise HTTPException(status_code=500, detail="NOTION_ROOT_PAGE_ID not set")
+            raise HTTPException(status_code=500, detail="❌ NOTION_ROOT_PAGE_ID が設定されていません。.envファイルに NOTION_ROOT_PAGE_ID=your_page_id を追加してください。")
         
         # Notion API呼び出し
         # safe_api_call関数を使用して、新しいページを作成します。
