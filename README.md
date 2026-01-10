@@ -3,6 +3,11 @@
 > **📢 重要なお知らせ**  
 > 2026/01/09 0:00以前にgitを取得した方は、Vercelデプロイの問題が解決されているため、最新版を再取得してください。
 
+> **⚠️ セキュリティに関する重要な注意**  
+> このアプリケーションは**教育・学習目的のデモンストレーション**として設計されています。  
+> **認証機能やレート制限がないため、本番環境での長期運用や公開URLの共有は推奨しません。**  
+> 詳細は [セキュリティに関する注意事項](#セキュリティに関する注意事項) を必ずお読みください。
+
 ---
 
 ## 📋 目次
@@ -10,6 +15,7 @@
 2. [セットアップ手順](#セットアップ手順)
 3. [起動方法](#起動方法)
 4. [トラブルシューティング](#トラブルシューティング)
+5. [セキュリティに関する注意事項](#セキュリティに関する注意事項)
 
 ---
 
@@ -282,3 +288,152 @@ const DEFAULT_SYSTEM_PROMPT = `あなたは大阪弁の陽気なアシスタン�
 1. `index.html` に `<select>` を追加
 2. `script.js` でその値を取得して送信データに含める
 3. `api/index.py` で受け取れるようにする
+
+---
+
+## ⚠️ セキュリティに関する注意事項
+
+### 🎓 本アプリケーションの位置づけ
+
+このアプリケーションは**教育・学習目的のデモンストレーション**として設計されています。  
+コードのシンプルさと学習のしやすさを優先し、本番環境向けの複雑なセキュリティ機能は実装していません。
+
+### 🚨 現在の主な制限事項
+
+| 項目 | 現状 | リスク |
+|------|------|--------|
+| **認証機能** | ❌ なし | 誰でもAPIエンドポイントにアクセス可能 |
+| **レート制限** | ❌ なし | 大量リクエストによるコスト急増の可能性 |
+| **CORS設定** | ⚠️ 全オリジン許可 | 不正なウェブサイトからのアクセスが可能 |
+| **入力検証** | △ 基本的なもののみ | 悪意のある大量データ送信のリスク |
+
+### ✅ 安全な使用方法
+
+以下の用途での使用を推奨します：
+
+- ✅ **ローカル開発環境**での学習・実験
+- ✅ **短期間のデモンストレーション**（数時間〜数日）
+- ✅ **プライベートなテスト**（自分のみがアクセス）
+- ✅ **講義や勉強会**での教材として
+
+### ❌ 避けるべき使用方法
+
+以下の用途での使用は**推奨しません**：
+
+- ❌ 本番環境での長期運用
+- ❌ 公開URLの不特定多数への共有
+- ❌ 機密情報・個人情報の保存
+- ❌ 24時間365日の稼働
+
+### 💡 Vercel等への公開デプロイ時の注意
+
+Vercelなどにデプロイして公開URLを取得できますが、以下のリスクを理解した上で使用してください：
+
+1. **APIキーの保護**
+   - 環境変数が正しく設定されているか確認
+   - `.env`ファイルは絶対にGitにコミットしない
+
+2. **アクセスログの確認**
+   - Vercelのダッシュボードで異常なアクセスがないか定期確認
+   - 不審なリクエストが多い場合は即座にデプロイを停止
+
+3. **コスト監視**
+   - Gemini API / Notion APIの使用量を定期的にチェック
+   - 予期しない課金が発生していないか確認
+
+4. **デプロイの停止方法**
+   ```bash
+   # Vercel CLIでプロジェクトを削除
+   vercel remove memo-ai
+   
+   # または、Vercelダッシュボードから削除
+   ```
+
+### 🛡️ 本番環境で使用する場合の必須対策
+
+もしこのアプリを本番環境で運用する場合は、最低限以下の対策を実装してください：
+
+#### 1. 認証機能の追加
+
+```python
+# 例: シンプルなトークン認証
+from fastapi import HTTPException, Security
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+
+security = HTTPBearer()
+API_TOKEN = os.getenv("API_SECRET_TOKEN")
+
+async def verify_token(credentials: HTTPAuthorizationCredentials = Security(security)):
+    if credentials.credentials != API_TOKEN:
+        raise HTTPException(status_code=403, detail="Invalid token")
+
+@app.post("/api/chat")
+async def chat(request: ChatRequest, _: None = Depends(verify_token)):
+    # ...
+```
+
+#### 2. CORS設定の厳格化
+
+```python
+# api/index.py を修正
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:8000").split(",")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,  # 特定のドメインのみ
+    allow_credentials=True,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type", "Authorization"],
+)
+```
+
+`.env`に追加：
+```env
+ALLOWED_ORIGINS=https://yourdomain.vercel.app,https://www.yourdomain.com
+```
+
+#### 3. レート制限の実装
+
+```bash
+pip install slowapi
+```
+
+```python
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+
+limiter = Limiter(key_func=get_remote_address)
+
+@app.post("/api/chat")
+@limiter.limit("10/minute")
+async def chat(request: Request, chat_req: ChatRequest):
+    # ...
+```
+
+#### 4. 環境変数の検証
+
+起動時に必須環境変数をチェック：
+
+```python
+# api/config.py に追加
+def validate_env():
+    required = ["NOTION_API_KEY", "GEMINI_API_KEY", "NOTION_ROOT_PAGE_ID"]
+    missing = [k for k in required if not os.getenv(k)]
+    if missing:
+        raise ValueError(f"Missing: {', '.join(missing)}")
+
+validate_env()
+```
+
+### 📚 詳細情報
+
+セキュリティ評価の詳細は以下のドキュメントを参照してください：
+
+- **包括的なセキュリティ評価**: `security_assessment.md`（アーティファクトディレクトリ内）
+- **推奨対策の詳細**: `security_recommendations.md`（アーティファクトディレクトリ内）
+
+---
+
+**最終更新**: 2026-01-10  
+**目的**: 教育・学習用デモアプリケーション  
+**推奨用途**: ローカル開発環境での短期間の実験・学習
