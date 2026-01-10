@@ -228,23 +228,24 @@ NotionとAIをつなぐ「ステートレス」なアーキテクチャを採用
   `Frontend (ブラウザ)` ↔ `Backend (FastAPI)` ↔ `External (Notion / Gemini)`
 - **データ保存**: アプリ自体はデータベースを持ちません。すべてのデータはブラウザやNotionに保存されます。
 
-## 2. ディレクトリ構造 (Map)
-改造するファイルを探すための地図です。
+## 2. ディレクトリ構造 (Directory Structure)
+
+アプリケーションのファイル構成と各ファイルの役割を解説します。
 
 ```text
 memo_ai/
-├── public/          (見た目と動き：フロントエンド)
-│   ├── index.html   (骨組み：画面のレイアウト)
-│   ├── style.css    (お化粧：色や配置のデザイン)
-│   └── script.js    (動き：AIへの送信、Notionへの保存処理)
+├── public/          # フロントエンド (クライアントサイド)
+│   ├── index.html   # UIレイアウト定義
+│   ├── style.css    # スタイル定義 (デザイン・レスポンシブ対応)
+│   └── script.js    # クライアントロジック (API通信、DOM操作)
 │
-├── api/             (頭脳と連携：バックエンド)
-│   ├── index.py     (指令塔：APIエンドポイントの定義)
-│   ├── ai.py        (脳みそ：AIプロンプトと連携処理)
-│   ├── notion.py    (手足：Notion APIとの通信)
-│   └── config.py    (設定：モデル定義など)
+├── api/             # バックエンド (サーバーサイド)
+│   ├── index.py     # FastAPIエンドポイント定義 (ルーティング)
+│   ├── ai.py        # AI連携処理 (Gemini API統合)
+│   ├── notion.py    # Notion API統合 (データ永続化)
+│   └── config.py    # 環境設定・モデル定義
 │
-└── .env             (秘密鍵：APIキーなどのパスワード類)
+└── .env             # 環境変数 (APIキー、シークレット)
 ```
 
 ## 3. データの流れ (Data Flow)
