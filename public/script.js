@@ -1815,8 +1815,8 @@ function renderModelList() {
     separator.style.margin = '8px 0';
     modelList.appendChild(separator);
 
-    // モデル一覧
-    availableModels.forEach(model => {
+    // モデル一覧（逆順で表示）
+    availableModels.slice().reverse().forEach(model => {
         modelList.appendChild(createModelItem(model));
     });
 }
