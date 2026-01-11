@@ -67,11 +67,12 @@ def _build_model_registry() -> List[Dict[str, Any]]:
         supports_vision = model_info.get("supports_vision", False)
         
         # LiteLLMのメタデータで判定できない場合のフォールバック（モデル名パターンマッチング）
+        # コスト最適化のため、安価なflash系モデルのみをvision対応として認識
         if not supports_vision:
             vision_patterns = [
-                "gpt-4o", "gpt-4-vision",
-                "claude-3", "claude-3-5-sonnet",
-                "gemini-1.5", "gemini-2.0", "gemini-pro-vision"
+                "gpt-4o-mini",
+                "claude-3-haiku", "claude-3-5-haiku",
+                "gemini-flash", "gemini-pro-vision"
             ]
             for pattern in vision_patterns:
                 if pattern in model_id.lower():
