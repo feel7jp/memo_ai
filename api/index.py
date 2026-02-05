@@ -981,13 +981,13 @@ async def save(request: SaveRequest):
             content = sanitize_image_data(content)
 
             # 巨大なテキストのハンドリング
-            # 10万文字を超えるような極端なデータは、APIエラーやタイムアウトを防ぐために切り詰めます。
+            # 1万文字を超えるような極端なデータは、APIエラーやタイムアウトを防ぐために切り詰めます。
             # 通常の長文（数千文字）は append_block 関数内で適切に分割処理されます。
-            if len(content) > 100000:
+            if len(content) > 10000:
                 print(
                     f"[Save] Warning: Extremely large content ({len(content)} chars). Truncating to 100k."
                 )
-                content = content[:100000] + "\n...(Truncated)..."
+                content = content[:10000] + "\n...(Truncated)..."
 
             success = await append_block(request.target_db_id, content)
             if not success:

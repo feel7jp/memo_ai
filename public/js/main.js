@@ -246,13 +246,31 @@ window.fetchWithCache = fetchWithCache;
 
 // --- Notion Logic (Targets, Saving, Forms) ---
 
-async function loadTargets() {
+async function loadTargets(forceRefresh = false) {
     try {
-        const data = await fetchWithCache(
-            '/api/targets', 
-            App.cache.KEYS.TARGETS,
-            App.cache.TTL.TARGETS
-        );
+        let data;
+        
+        if (forceRefresh) {
+            // 強制更新：キャッシュをバイパスしてAPIから直接取得
+            localStorage.removeItem(App.cache.KEYS.TARGETS);
+            console.log('[loadTargets] Force refresh - fetching from API');
+            const res = await fetch('/api/targets');
+            if (!res.ok) throw new Error(`Fetch failed: ${res.status}`);
+            data = await res.json();
+            // 取得したデータをキャッシュに保存
+            localStorage.setItem(App.cache.KEYS.TARGETS, JSON.stringify({
+                timestamp: Date.now(),
+                data: data
+            }));
+            console.log('[loadTargets] Fetched', data.targets.length, 'targets');
+        } else {
+            data = await fetchWithCache(
+                '/api/targets', 
+                App.cache.KEYS.TARGETS,
+                App.cache.TTL.TARGETS
+            );
+        }
+        
         renderTargetOptions(data.targets);
 
         // Enable header buttons after targets load
@@ -266,6 +284,12 @@ async function loadTargets() {
     }
 }
 window.loadTargets = loadTargets;
+
+// リスト更新関数（UIから呼び出し用）
+function refreshTargetList() {
+    loadTargets(true);
+}
+window.refreshTargetList = refreshTargetList;
 
 function renderTargetOptions(targets) {
     const selector = document.getElementById('appSelector');
@@ -320,15 +344,18 @@ function renderTargetOptions(targets) {
     // Apply selection
     if (targetToSelect) {
         selector.value = targetToSelect;
-        // Trigger change event to update state
-        handleTargetChange();
+        // Trigger change event to update state (skipRefresh=true to prevent loop)
+        handleTargetChange(true);
     } else {
         // Fallback if no targets exist at all (only "Create New Page")
         selector.value = 'new_page'; 
     }
 }
 
-async function handleTargetChange() {
+async function handleTargetChange(skipRefreshOrEvent = false) {
+    // HTMLイベントから呼ばれた場合はEventオブジェクトが渡されるため、booleanかどうかをチェック
+    const skipRefresh = skipRefreshOrEvent === true;
+    
     const selector = document.getElementById('appSelector');
     const selectedOpt = selector.options[selector.selectedIndex];
     const targetId = selector.value;
@@ -402,6 +429,14 @@ async function handleTargetChange() {
         
         // Hide properties container for Page
         if (propsContainer) propsContainer.style.display = 'none';
+    }
+    
+    // バックグラウンドでリストを更新（削除されたページを反映）
+    // skipRefresh=true の場合は無限ループ防止のためスキップ
+    if (!skipRefresh) {
+        setTimeout(() => {
+            loadTargets(true);
+        }, 100);
     }
 }
 window.handleTargetChange = handleTargetChange;
@@ -703,7 +738,7 @@ async function createNewPage(title) {
         const res = await fetch('/api/pages/create', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title: title })
+            body: JSON.stringify({ page_name: title })
         });
         
         if (!res.ok) throw new Error(await res.text());
