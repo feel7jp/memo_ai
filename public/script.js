@@ -2076,8 +2076,15 @@ function openPromptModal() {
         }
     }
     
-    // 現在のプロンプトまたはデフォルトを表示
-    textarea.value = savedPrompt || App.defaultPrompt;
+    // カスタムプロンプトがあれば表示、なければ空（デフォルト使用）
+    if (savedPrompt) {
+        textarea.value = savedPrompt;
+        textarea.placeholder = 'システムプロンプトを入力してください...';
+    } else {
+        textarea.value = '';
+        textarea.placeholder = 'デフォルトのプロンプトを使用します（カスタマイズする場合はここに入力）';
+    }
+    
     promptOriginalValue = textarea.value; // 元の値を保存
     textarea.disabled = false;
     saveBtn.disabled = false;
@@ -2113,10 +2120,26 @@ async function saveSystemPrompt() {
     saveBtn.disabled = true;
     
     try {
-        // デフォルトと異なる場合のみlocalStorageに保存
         const promptKey = `${App.cache.KEYS.PROMPT_PREFIX}${targetId}`;
         
-        if (newPrompt && newPrompt !== App.defaultPrompt) {
+        // 空白文字のみ、または空の場合 → デフォルトを使用（カスタム設定を削除）
+        // デフォルトと同じ場合 → デフォルトを使用（カスタム設定を削除）
+        // それ以外 → カスタムプロンプトとして保存
+        if (!newPrompt || newPrompt === App.defaultPrompt.trim()) {
+            // デフォルトを使用: localStorageから削除
+            localStorage.removeItem(promptKey);
+            
+            // 現在のターゲットと同じ場合はApp.target.systemPromptも更新
+            if (targetId === App.target.id) {
+                App.target.systemPrompt = null;
+            }
+            
+            // リセットボタンを隠す
+            if (resetBtn) {
+                resetBtn.classList.add('hidden');
+                resetBtn.disabled = true;
+            }
+        } else {
             // カスタムプロンプトを保存
             localStorage.setItem(promptKey, newPrompt);
             
@@ -2128,24 +2151,12 @@ async function saveSystemPrompt() {
             // リセットボタンを表示
             if (resetBtn) {
                 resetBtn.classList.remove('hidden');
-            }
-        } else {
-            // デフォルトと同じならカスタム設定を削除
-            localStorage.removeItem(promptKey);
-            
-            // 現在のターゲットと同じ場合はApp.target.systemPromptも更新
-            if (targetId === App.target.id) {
-                App.target.systemPrompt = null;
-            }
-            
-            // リセットボタンを隠す
-            if (resetBtn) {
-                resetBtn.classList.add('hidden');
+                resetBtn.disabled = false;
             }
         }
         
         // 保存後、元の値を更新（ダーティフラグをクリア）
-        promptOriginalValue = newPrompt;
+        promptOriginalValue = textarea.value;
         
         showToast('✅ システムプロンプトを保存しました');
         closePromptModal(); // 保存後にモーダルを閉じる
@@ -2165,10 +2176,13 @@ function resetSystemPrompt() {
     localStorage.removeItem(promptKey); // 設定を削除
     App.target.systemPrompt = null;
     
-    // テキストエリアをデフォルトに戻す
+    // テキストエリアを空にする（デフォルトを使用することを示す）
     const textarea = document.getElementById('promptTextarea');
     if (textarea) {
-        textarea.value = App.defaultPrompt;
+        textarea.value = ''; // 空白にして、デフォルト使用を明示
+        textarea.placeholder = 'デフォルトのプロンプトを使用します';
+        // 元の値も更新してダーティフラグをクリア
+        promptOriginalValue = '';
     }
     
     // リセットボタンを無効化
@@ -2219,7 +2233,15 @@ document.addEventListener('DOMContentLoaded', () => {
             // 新しいターゲットのプロンプトを読み込み
             const promptKey = `${App.cache.KEYS.PROMPT_PREFIX}${e.target.value}`;
             const savedPrompt = localStorage.getItem(promptKey);
-            textarea.value = savedPrompt || App.defaultPrompt;
+            
+            // カスタムプロンプトがあれば表示、なければ空（デフォルト使用）
+            if (savedPrompt) {
+                textarea.value = savedPrompt;
+                textarea.placeholder = 'システムプロンプトを入力してください...';
+            } else {
+                textarea.value = '';
+                textarea.placeholder = 'デフォルトのプロンプトを使用します（カスタマイズする場合はここに入力）';
+            }
             promptOriginalValue = textarea.value;
             
             // リセットボタンの表示制御

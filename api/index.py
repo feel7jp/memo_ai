@@ -28,14 +28,9 @@ from api.ai import analyze_text_with_ai, chat_analyze_text_with_ai
 # 使用可能なAIモデル定義
 from api.models import get_available_models, get_text_models, get_vision_models
 # アプリケーションのデフォルト設定
-from api.config import DEFAULT_TEXT_MODEL, DEFAULT_MULTIMODAL_MODEL, DEFAULT_SYSTEM_PROMPT, DEBUG_MODE
+from api.config import DEFAULT_TEXT_MODEL, DEFAULT_MULTIMODAL_MODEL, DEFAULT_SYSTEM_PROMPT, DEBUG_MODE, normalize_notion_id
 # レート制限
 from api.rate_limiter import rate_limiter
-
-# --- ヘルパー関数: Notion ID正規化 ---
-def normalize_notion_id(notion_id_or_url: str) -> str:
-    """Notion IDまたはURLを32文字の英数字に正規化"""
-    import re; return re.sub(r'[^a-zA-Z0-9]', '', notion_id_or_url.split('/')[-1].split('?')[0].split('#')[0])[-32:] if notion_id_or_url else ""
 
 # 環境変数の読み込み
 # ローカル環境では.envファイルから読み込み、Vercel環境では環境変数から直接読み込み
@@ -324,12 +319,6 @@ async def debug_info():
     import sys
     
     # 現在時刻（JST）
-    from datetime import datetime
-    try:
-        from zoneinfo import ZoneInfo
-    except ImportError:
-        from backports.zoneinfo import ZoneInfo
-    
     jst = ZoneInfo("Asia/Tokyo")
     now = datetime.now(jst)
     timestamp = now.strftime("%Y-%m-%dT%H:%M:%S%z")

@@ -39,9 +39,9 @@ class SimpleRateLimiter:
         endpoint: str = "default",
         custom_limit: Optional[int] = None
     ) -> dict:
-        """レート制限をチェック（グローバル制限のみ）
+        """レート制限をチェック（IP別 + グローバル制限）
         
-        戻り値: 空の辞書（ヘッダーなし）
+        戻り値: レート制限ヘッダー
         """
         if not self.enabled:
             return {}
@@ -49,10 +49,16 @@ class SimpleRateLimiter:
         # 定期的にメモリをクリーンアップ
         self._cleanup_old_entries()
         
-        # グローバル制限チェックのみ（1時間1000リクエスト）
+        # クライアントIPを取得
+        client_ip = self._get_client_ip(request)
+        
+        # IP別制限チェック
+        rate_limit_headers = self._check_ip_limit(client_ip, endpoint, custom_limit)
+        
+        # グローバル制限チェック
         self._check_global_limit(endpoint)
         
-        return {}
+        return rate_limit_headers
     
     def _get_client_ip(self, request: Request) -> str:
         """クライアントIPを取得（Vercelのヘッダーを考慮）"""
