@@ -271,3 +271,31 @@ async def query_database(database_id: str, limit: int = 20) -> List[Dict[str, An
     if not response:
         return []
     return response.get("results", [])
+
+async def update_page_properties(page_id: str, properties: Dict[str, Any]) -> bool:
+    """
+    ページのプロパティを更新
+    
+    既存のページのタイトルやその他のプロパティを更新します。
+    
+    Args:
+        page_id (str): 更新対象のページID
+        properties (Dict): 更新するプロパティ（Notion API形式）
+            例: {"title": {"title": [{"text": {"content": "新しいタイトル"}}]}}
+    
+    Returns:
+        bool: 更新が成功した場合True
+        
+    Examples:
+        # タイトルを更新
+        >>> await update_page_properties(
+        ...     page_id="abc123",
+        ...     properties={
+        ...         "Name": {"title": [{"text": {"content": "新しいタイトル"}}]}
+        ...     }
+        ... )
+    """
+    body = {"properties": properties}
+    
+    response = await safe_api_call("PATCH", f"pages/{page_id}", json=body)
+    return response is not None

@@ -85,11 +85,34 @@ async def generate_json(
             except Exception as e:
                 print(f"Cost calculation failed: {e}")
             
+            # Thinking/Reasoningコンテンツの抽出（デバッグ用）
+            # プロバイダごとに異なる形式で返される
+            thinking_content = None
+            message = response.choices[0].message
+            
+            # Claude: thinking_blocks (list of {type: "thinking", thinking: "..."})
+            if hasattr(message, 'thinking_blocks') and message.thinking_blocks:
+                try:
+                    thinking_content = "\n".join([
+                        block.get("thinking", "") if isinstance(block, dict) else str(block)
+                        for block in message.thinking_blocks
+                    ])
+                except Exception as e:
+                    print(f"[LLM] Failed to extract thinking_blocks: {e}")
+            
+            # Gemini/LiteLLM: reasoning_content (string)
+            if not thinking_content and hasattr(message, 'reasoning_content') and message.reasoning_content:
+                thinking_content = message.reasoning_content
+            
+            # OpenAI o1/o3: reasoning_tokensは数値のみ（内容は非公開）
+            # usage.completion_tokens_details.reasoning_tokens で確認可能
+            
             return {
                 "content": content,
                 "usage": usage,
                 "cost": cost,
-                "model": model
+                "model": model,
+                "thinking": thinking_content  # デバッグ用: None if OpenAI reasoning model
             }
             
         except Exception as e:

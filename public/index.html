@@ -95,6 +95,8 @@
                 </div>
 
             </div>
+            <!-- 会話クリアボタン（右下固定） -->
+            <button id="sessionClearBtn" class="btn-clear-session-floating">会話クリア</button>
         </section>
 
         <!-- 入力エリア -->
@@ -141,8 +143,10 @@
                 <!-- 入力行 -->
                 <div class="input-row">
                     <button id="addMediaBtn" class="btn-add-media" title="画像を追加">＋</button>
-                    <textarea id="memoInput" placeholder="メッセージを入力..." rows="1"></textarea>
-                    <button id="emojiBtn" class="btn-emoji" title="絵文字を追加">😀</button>
+                    <div class="input-wrapper">
+                        <textarea id="memoInput" placeholder="メッセージを入力..." rows="1"></textarea>
+                        <button id="emojiBtn" class="btn-emoji" title="スタンプ">😀</button>
+                    </div>
                 </div>
 
                 <!-- メディアメニュー -->
@@ -206,12 +210,6 @@
                 <!-- Hidden Inputs -->
                 <input type="file" id="cameraInput" accept="image/*" capture="user" class="hidden">
                 <input type="file" id="imageInput" accept="image/*" class="hidden">
-
-                <!-- チャットコントロール -->
-                <div class="chat-controls">
-                    <div class="spacer"></div>
-                    <button id="sessionClearBtn" class="btn-clear-session">会話クリア</button>
-                </div>
             </div>
 
 
@@ -228,7 +226,10 @@
                     </div>
                     <div class="modal-body">
                         <div class="modal-info">
-                            <strong>ターゲット:</strong> <span id="modalTargetName"></span>
+                            <label for="promptTargetSelect"><strong>ターゲット:</strong></label>
+                            <select id="promptTargetSelect" class="target-select">
+                                <option disabled selected>読み込み中...</option>
+                            </select>
                         </div>
                         <textarea id="promptTextarea" class="prompt-textarea" rows="10"
                             placeholder="システムプロンプトを入力してください..."></textarea>

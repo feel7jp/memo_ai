@@ -147,8 +147,7 @@ Restraints:
 - Your output must be valid JSON ONLY.
 - Structure:
 {{
-  "message": "Response to the user",
-  "refined_text": "Refined version of the input, if applicable (or null)",
+  "message": "Response to the user (required)",
   "properties": {{ "Property Name": "Value" }} // Only if user intends to save data
 }}
 - If the user is just chatting, "properties" should be null.
@@ -395,8 +394,7 @@ Restraints:
 - Your output must be valid JSON ONLY.
 - Structure:
 {{
-  "message": "Response to the user",
-  "refined_text": "Refined version of the input, if applicable (or null)",
+  "message": "Response to the user (required)",
   "properties": {{ "Property Name": "Value" }} // Only if user intends to save data
 }}
 - If the user is just chatting, "properties" should be null.
@@ -481,16 +479,9 @@ Restraints:
         # プロパティが直接返された場合のフォールバックメッセージ生成
         has_properties = any(key in data for key in ["Title", "Content", "properties"])
         
-        if "refined_text" in data and data["refined_text"]:
-            data["message"] = f"タスク名を「{data['refined_text']}」に提案します。"
-        elif has_properties:
-            if "Title" in data or "Content" in data:
-                title_val = data.get("Title", "")
-                data["message"] = f"内容を整理しました: {title_val}" if title_val else "プロパティを抽出しました。"
-            elif "properties" in data and data["properties"]:
-                data["message"] = "プロパティを抽出しました。"
-            else:
-                data["message"] = "プロパティを抽出しました。"
+        if has_properties:
+            title_val = data.get("Title", data.get("properties", {}).get("Title", ""))
+            data["message"] = f"内容を整理しました: {title_val}" if title_val else "プロパティを抽出しました。"
         else:
             data["message"] = "（応答完了）"
         print(f"[Chat AI] Fallback message: {data['message']}")
@@ -523,6 +514,11 @@ Restraints:
     data["usage"] = result["usage"]
     data["cost"] = result["cost"]
     data["model"] = result["model"]
+    
+    # Thinkingコンテンツ（デバッグ用）
+    # ユーザーには表示しないが、デバッグパネルで確認可能
+    if result.get("thinking"):
+        data["thinking"] = result["thinking"]
     
     print(f"[Chat AI] Final response data: {data}")
     

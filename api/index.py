@@ -22,7 +22,7 @@ import httpx
 
 # --- 自作モジュールのインポート ---
 # Notion APIとの通信を担当する関数群
-from api.notion import fetch_config_db, get_db_schema, fetch_recent_pages, create_page, fetch_children_list, get_page_info, safe_api_call, append_block, query_database
+from api.notion import fetch_config_db, get_db_schema, fetch_recent_pages, create_page, fetch_children_list, get_page_info, safe_api_call, append_block, query_database, update_page_properties
 # AI（Gemini等）との連携を担当する関数群
 from api.ai import analyze_text_with_ai, chat_analyze_text_with_ai
 # 使用可能なAIモデル定義
@@ -32,7 +32,10 @@ from api.config import DEFAULT_TEXT_MODEL, DEFAULT_MULTIMODAL_MODEL, DEFAULT_SYS
 # レート制限
 from api.rate_limiter import rate_limiter
 
-
+# --- ヘルパー関数: Notion ID正規化 ---
+def normalize_notion_id(notion_id_or_url: str) -> str:
+    """Notion IDまたはURLを32文字の英数字に正規化"""
+    import re; return re.sub(r'[^a-zA-Z0-9]', '', notion_id_or_url.split('/')[-1].split('?')[0].split('#')[0])[-32:] if notion_id_or_url else ""
 
 # 環境変数の読み込み
 # ローカル環境では.envファイルから読み込み、Vercel環境では環境変数から直接読み込み
@@ -46,7 +49,11 @@ required_env_vars = {
 
 missing_vars = []
 for var_name, var_description in required_env_vars.items():
-    if not os.environ.get(var_name):
+    value = os.environ.get(var_name)
+    # NOTION_ROOT_PAGE_IDの正規化
+    if var_name == "NOTION_ROOT_PAGE_ID" and value:
+        os.environ[var_name] = normalize_notion_id(value)
+    if not value:
         missing_vars.append(f"  - {var_name} ({var_description})")
 
 if missing_vars:
@@ -150,26 +157,48 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 # --- CORS (Cross-Origin Resource Sharing) 設定 ---
-# 異なるオリジン（ドメイン、ポート）からのリクエストを許可するための設定です。
-#
-# デフォルト動作（初心者向け）:
-#   - 全ての環境で自動的に全オリジンを許可 ("*")
-#   - 環境変数の設定は不要です
-#
-# セキュリティを強化したい場合（任意）:
-#   環境変数 ALLOWED_ORIGINS を設定
-#   例: ALLOWED_ORIGINS=https://yourdomain.com,https://app.yourdomain.com
+# 本番環境では自動検出またはALLOWED_ORIGINS環境変数で設定
 
-allowed_origins_str = os.environ.get("ALLOWED_ORIGINS")
+def detect_allowed_origins() -> list:
+    """CORS許可オリジンを自動検出または環境変数から取得"""
+    # 1. 明示的な環境変数があれば優先
+    explicit = os.environ.get("ALLOWED_ORIGINS")
+    if explicit:
+        origins = [o.strip() for o in explicit.split(",")]
+        print(f"🔐 [CORS] Explicit: {', '.join(origins)}")
+        return origins
+    
+    # 2. 本番環境の自動検出
+    detected = []
+    
+    # Vercel: VERCEL_URL から自動取得
+    vercel_url = os.environ.get("VERCEL_URL")
+    if vercel_url:
+        detected.append(f"https://{vercel_url}")
+        # プロダクションドメインも追加 (VERCEL_PROJECT_PRODUCTION_URL)
+        prod_url = os.environ.get("VERCEL_PROJECT_PRODUCTION_URL")
+        if prod_url:
+            detected.append(f"https://{prod_url}")
+    
+    # GCP Cloud Run: K_SERVICE環境変数で検出, CLOUD_RUN_URLで取得
+    cloud_run_url = os.environ.get("CLOUD_RUN_URL")
+    if cloud_run_url:
+        detected.append(cloud_run_url)
+    
+    if detected:
+        print(f"🔐 [CORS] Auto-detected: {', '.join(detected)}")
+        return detected
+    
+    # 3. 本番環境で未設定の場合は警告して全許可
+    if not DEBUG_MODE:
+        print("⚠️  [CORS] 本番環境では ALLOWED_ORIGINS を設定してください")
+        print("    例: ALLOWED_ORIGINS=https://yourdomain.com")
+    else:
+        print("🌍 [CORS] Development mode: allowing all origins (*)")
+    
+    return ["*"]
 
-if allowed_origins_str:
-    # セキュリティ強化: 明示的に許可するオリジンを指定
-    allowed_origins = [origin.strip() for origin in allowed_origins_str.split(",")]
-    print(f"🔐 [CORS] Restricted mode: {', '.join(allowed_origins)}")
-else:
-    # デフォルト: 全許可（初心者向け・開発向け）
-    allowed_origins = ["*"]
-    print(f"🌍 [CORS] Development mode: allowing all origins (*)")
+allowed_origins = detect_allowed_origins()
 
 app.add_middleware(
     CORSMiddleware,
@@ -375,12 +404,28 @@ async def debug_info():
         }
         routes.append(route_info)
     
+    # CORS設定情報
+    cors_info = {
+        "allowed_origins": allowed_origins,
+        "is_restricted": allowed_origins != ["*"],
+        "detected_platform": None
+    }
+    
+    # プラットフォーム検出
+    if os.environ.get("VERCEL_URL"):
+        cors_info["detected_platform"] = "Vercel"
+    elif os.environ.get("CLOUD_RUN_URL"):
+        cors_info["detected_platform"] = "GCP Cloud Run"
+    elif os.environ.get("ALLOWED_ORIGINS"):
+        cors_info["detected_platform"] = "Manual (ALLOWED_ORIGINS)"
+    
     return {
         "timestamp": timestamp,
         "environment": environment,
         "paths": paths,
         "filesystem_checks": filesystem_checks,
         "env_vars": env_vars,
+        "cors": cors_info,
         "routes": routes[:20]  # 最初の20個のみ
     }
 
@@ -675,19 +720,19 @@ async def analyze(request: Request, analyze_req: AnalyzeRequest):
         print(f"[AI Analysis Error] {type(e).__name__}: {e}")
         import traceback
         traceback.print_exc()
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "error": "AI analysis failed",
-                "message": str(e),
-                "type": type(e).__name__,
-                "suggestions": [
-                    "GEMINI_API_KEYが正しく設定されているか確認してください",
-                    "Gemini APIの利用制限に達していないか確認してください",
-                    "入力テキストが長すぎないか確認してください"
-                ]
-            }
-        )
+        
+        # 本番環境では詳細を隠蔽
+        detail = {"error": "AI analysis failed"}
+        if DEBUG_MODE:
+            detail["message"] = str(e)
+            detail["type"] = type(e).__name__
+        else:
+            detail["message"] = "AIの処理中にエラーが発生しました"
+        detail["suggestions"] = [
+            "しばらく待ってから再試行してください",
+            "問題が続く場合は管理者にお問い合わせください"
+        ]
+        raise HTTPException(status_code=500, detail=detail)
 
 @app.post("/api/chat")
 async def chat_endpoint(request: Request, chat_req: ChatRequest):
@@ -786,32 +831,30 @@ async def chat_endpoint(request: Request, chat_req: ChatRequest):
             print(f"[Chat AI Error] {type(ai_error).__name__}: {ai_error}")
             import traceback
             traceback.print_exc()
-            raise HTTPException(
-                status_code=500,
-                detail={
-                    "error": "Chat AI failed",
-                    "message": str(ai_error),
-                    "type": type(ai_error).__name__,
-                    "suggestions": [
-                        "GEMINI_API_KEYが正しく設定されているか確認してください",
-                        "Gemini APIの利用制限に達していないか確認してください"
-                    ]
-                }
-            )
+            
+            # 本番環境では詳細を隠蔽
+            detail = {"error": "Chat AI failed"}
+            if DEBUG_MODE:
+                detail["message"] = str(ai_error)
+                detail["type"] = type(ai_error).__name__
+            else:
+                detail["message"] = "チャット処理中にエラーが発生しました"
+            detail["suggestions"] = ["しばらく待ってから再試行してください"]
+            raise HTTPException(status_code=500, detail=detail)
     except HTTPException:
         raise
     except Exception as e:
         print(f"[Chat Endpoint Error] {e}")
         import traceback
         traceback.print_exc()
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "error": "Unexpected error",
-                "message": str(e),
-                "type": type(e).__name__
-            }
-        )
+        
+        detail = {"error": "Unexpected error"}
+        if DEBUG_MODE:
+            detail["message"] = str(e)
+            detail["type"] = type(e).__name__
+        else:
+            detail["message"] = "予期しないエラーが発生しました"
+        raise HTTPException(status_code=500, detail=detail)
 
 @app.post("/api/save")
 async def save(request: SaveRequest):
@@ -1079,6 +1122,46 @@ async def get_database_content(database_id: str):
         # エラーが発生した場合はログに出力し、500エラーを返します。
         print(f"[Database Content Error] {e}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch database content: {str(e)}")
+
+@app.patch("/api/pages/{page_id}")
+async def update_page(page_id: str, request: Request):
+    """
+    ページのプロパティを更新
+    
+    ページのタイトルやその他のプロパティを更新します。
+    リクエストボディ例:
+    {
+        "properties": {
+            "Name": {"title": [{"text": {"content": "新しいタイトル"}}]}
+        }
+    }
+    """
+    # レート制限チェック
+    await rate_limiter.check_rate_limit(request, endpoint="update_page", custom_limit=20)
+    
+    try:
+        body = await request.json()
+        properties = body.get("properties", {})
+        
+        if not properties:
+            raise HTTPException(status_code=400, detail="プロパティが指定されていません")
+        
+        # ページプロパティの更新
+        success = await update_page_properties(page_id, properties)
+        
+        if success:
+            return {"status": "success", "message": "ページを更新しました", "page_id": page_id}
+        else:
+            raise HTTPException(status_code=500, detail="ページの更新に失敗しました")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[Update Page Error] {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"ページ更新エラー: {str(e)}")
+
 
 # --- 静的ファイルの配信設定 ---
 # この app.mount は最後に記述することが推奨されます。

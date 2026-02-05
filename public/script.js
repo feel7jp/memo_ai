@@ -68,6 +68,9 @@ const App = {
 返答は機械的に、タスク名としてふさわしい文字列のみを出力すること。`
 };
 
+// プロンプト編集の状態管理
+let promptOriginalValue = '';
+
 // デバッグログ
 function debugLog(...args) { if (App.debug.enabled) console.log(...args); }
 
@@ -179,6 +182,40 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     
+    // --- 絵文字機能 (Emoji Features) ---
+    const emojiBtn = document.getElementById('emojiBtn');
+    const emojiPalette = document.getElementById('emojiPalette');
+    
+    // 絵文字ボタンのトグル
+    if (emojiBtn && emojiPalette) {
+        emojiBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            emojiPalette.classList.toggle('hidden');
+        });
+        
+        // 絵文字パレット外クリックで閉じる処理
+        document.addEventListener('click', (e) => {
+            if (emojiPalette && !emojiPalette.contains(e.target) && e.target !== emojiBtn) {
+                emojiPalette.classList.add('hidden');
+            }
+        });
+        
+        // 絵文字選択時のハンドラ（スタンプとして即座に送信）
+        const emojiButtons = document.querySelectorAll('.emoji-btn');
+        emojiButtons.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const emoji = btn.getAttribute('data-emoji');
+                if (emoji) {
+                    // スタンプとして即座に送信
+                    sendStamp(emoji);
+                    
+                    // パレットを閉じる
+                    emojiPalette.classList.add('hidden');
+                }
+            });
+        });
+    }
+    
     // 1. ラストラフ（下書き）の復元
     // ブラウザのlocalStorageから編集中のテキストを復元します。
     const savedDraft = localStorage.getItem(App.cache.KEYS.DRAFT);
@@ -194,9 +231,8 @@ document.addEventListener('DOMContentLoaded', () => {
         memoInput.style.height = 'auto';
         memoInput.style.height = Math.min(memoInput.scrollHeight, 120) + 'px';
         
-        // 入力のたびに下書き保存
+        // 入力のたびに下書き保存（通知なし）
         localStorage.setItem(App.cache.KEYS.DRAFT, memoInput.value);
-        updateSaveStatus("下書き保存中...");
     });
     
     // 3. IME対応
@@ -405,6 +441,18 @@ function renderDebugInfo(data) {
     if (!content) return;
     
     let html = `<div class="debug-timestamp">取得時刻: ${data.timestamp || 'N/A'}</div>`;
+    
+    // CORS設定
+    if (data.cors) {
+        html += '<div class="debug-section">';
+        html += '<h3>🔐 CORS設定</h3><div class="debug-grid">';
+        html += `<div class="debug-item"><span class="debug-label">許可オリジン:</span><code class="debug-value">${data.cors.allowed_origins.join(', ')}</code></div>`;
+        html += `<div class="debug-item"><span class="debug-label">制限モード:</span><span class="debug-value">${data.cors.is_restricted ? '✅ はい' : '❌ いいえ (全許可)'}</span></div>`;
+        if (data.cors.detected_platform) {
+            html += `<div class="debug-item"><span class="debug-label">検出プラットフォーム:</span><span class="debug-value">${data.cors.detected_platform}</span></div>`;
+        }
+        html += '</div></div>';
+    }
     
     // 最新API通信
     html += '<div class="debug-section">';
@@ -776,11 +824,38 @@ function clearPreviewImage() {
     previewArea.classList.add('hidden');
 }
 
+// --- スタンプ送信機能 (Stamp Send Function) ---
+
+/**
+ * スタンプを即座にチャット履歴に追加する（LINEスタイル）
+ * @param {string} emoji - 送信するスタンプ（絵文字）
+ */
+function sendStamp(emoji) {
+    if (!App.target.id) {
+        showToast('ターゲットを選択してください');
+        return;
+    }
+    
+    console.log('[Stamp] Sending stamp:', emoji);
+    
+    // チャット履歴に追加（スタンプタイプ）
+    addChatMessage('stamp', emoji);
+    
+    // スクロールを最下部へ
+    const chatHistory = document.getElementById('chatHistory');
+    if (chatHistory) {
+        setTimeout(() => {
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+        }, 100);
+    }
+}
+
 // --- チャット履歴管理 ---
+
 
 function addChatMessage(type, message, properties = null, modelInfo = null) {
     const entry = {
-        type: type,  // 'user' | 'ai' | 'system'
+        type: type,  // 'user' | 'ai' | 'system' | 'stamp'
         message: message,
         properties: properties,
         timestamp: Date.now(),
@@ -805,6 +880,15 @@ function renderChatHistory() {
             messagePreview: entry.message?.substring(0, 50),
             hasModelInfo: !!entry.modelInfo
         });
+        
+        // スタンプタイプは特別な表示（吹き出しなし、大きく表示）
+        if (entry.type === 'stamp') {
+            const stampDiv = document.createElement('div');
+            stampDiv.className = 'chat-stamp';
+            stampDiv.textContent = entry.message;
+            container.appendChild(stampDiv);
+            return; // スタンプの処理はここで終了
+        }
         
         const bubble = document.createElement('div');
         bubble.className = `chat-bubble ${entry.type}`;
@@ -861,13 +945,40 @@ function renderChatHistory() {
             // Try to find model info to get provider prefix
             const modelInfo = App.model.available.find(m => m.id === model);
             const modelDisplay = modelInfo 
-                ? `[${modelInfo.provider}] ${modelInfo.name}`
+                ? `${modelInfo.provider}/${modelInfo.name}`
                 : model;
             
-            let infoText = `Model: ${modelDisplay}`;
-            if (cost) infoText += ` | Cost: $${parseFloat(cost).toFixed(5)}`;
+            let infoText = modelDisplay;
+            if (cost) infoText += ` | $${parseFloat(cost).toFixed(5)}`;
             // usage is object {prompt_tokens, completion_tokens, total_tokens}
-            if (usage && usage.total_tokens) infoText += ` | Tokens: ${usage.total_tokens}`;
+            if (usage && usage.total_tokens) {
+                // 送信・受信・思考トークンを個別表示
+                if (usage.prompt_tokens && usage.completion_tokens) {
+                    infoText += ` | S:${usage.prompt_tokens} / R:${usage.completion_tokens}`;
+                    
+                    // Think トークンがあれば表示（複数の可能性がある位置を確認）
+                    let thinkingTokens = null;
+                    
+                    // Gemini 2.0 thinking models: completion_tokens_details.thinking_tokens
+                    if (usage.completion_tokens_details?.thinking_tokens) {
+                        thinkingTokens = usage.completion_tokens_details.thinking_tokens;
+                    }
+                    // OpenAI o1/o3: completion_tokens_details.reasoning_tokens
+                    else if (usage.completion_tokens_details?.reasoning_tokens) {
+                        thinkingTokens = usage.completion_tokens_details.reasoning_tokens;
+                    }
+                    // Alternative location: cached_tokens_details.thinking_tokens
+                    else if (usage.cached_tokens_details?.thinking_tokens) {
+                        thinkingTokens = usage.cached_tokens_details.thinking_tokens;
+                    }
+                    
+                    if (thinkingTokens) {
+                        infoText += ` (Think:${thinkingTokens})`;
+                    }
+                } else {
+                    infoText += ` | Tokens: ${usage.total_tokens}`;
+                }
+            }
             
             infoDiv.textContent = infoText;
             bubble.appendChild(infoDiv);
@@ -929,6 +1040,82 @@ function applyRefinedText(text) {
 }
 
 // --- チャット・分析メインロジック (Core Logic) ---
+
+/**
+ * スタンプ（絵文字）を即座に送信してAI応答を取得
+ */
+async function sendStamp(emoji) {
+    if (!App.target.id) {
+        showToast("ターゲットを選択してください");
+        return;
+    }
+    
+    // スタンプとしてチャットに追加（大きく表示）
+    addChatMessage('stamp', emoji);
+    
+    // 入力欄をクリア（念のため）
+    const memoInput = document.getElementById('memoInput');
+    if (memoInput) memoInput.value = '';
+    
+    // AIタイピングインジケーター表示
+    showAITypingIndicator();
+    
+    try {
+        // リファレンスページの取得
+        let referenceContext = null;
+        const referenceToggle = document.getElementById('referencePageToggle');
+        if (referenceToggle?.checked && App.target.id) {
+            referenceContext = await fetchAndTruncatePageContent(App.target.id, App.target.type);
+        }
+        
+        // APIリクエスト
+        const requestBody = {
+            text: emoji,
+            target_id: App.target.id,
+            system_prompt: App.target.systemPrompt || App.defaultPrompt,
+            session_history: App.chat.session.slice(-10),
+            reference_context: referenceContext,
+            model: App.model.current
+        };
+        
+        const res = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestBody)
+        });
+        
+        hideAITypingIndicator();
+        
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.detail?.message || err.detail || `HTTP ${res.status}`);
+        }
+        
+        const data = await res.json();
+        recordApiCall('/api/chat', 'POST', requestBody, data, null, res.status);
+        
+        // セッション履歴を更新
+        App.chat.session.push({ role: 'user', content: emoji });
+        App.chat.session.push({ role: 'assistant', content: data.message });
+        
+        // AI応答を表示
+        const modelInfo = {
+            model: data.model,
+            usage: data.usage,
+            cost: data.cost
+        };
+        addChatMessage('ai', data.message, null, modelInfo);
+        
+        // コスト累計
+        if (data.cost) App.model.sessionCost += data.cost;
+        
+    } catch (err) {
+        hideAITypingIndicator();
+        console.error('[sendStamp] Error:', err);
+        addChatMessage('ai', `❌ エラー: ${err.message}`);
+        recordApiCall('/api/chat', 'POST', { text: emoji }, null, err.message, null);
+    }
+}
 
 async function handleChatAI() {
     const memoInput = document.getElementById('memoInput');
@@ -1100,7 +1287,6 @@ async function handleChatAI() {
                 messageType: typeof data.message,
                 messageValue: data.message,
                 hasProperties: !!data.properties,
-                hasRefinedText: !!data.refined_text,
                 model: data.model,
                 responseKeys: Object.keys(data)
             };
@@ -1124,6 +1310,16 @@ async function handleChatAI() {
     } catch(e) {
         console.error('[handleChatAI] Error:', e);
         hideAITypingIndicator(); // エラー時もインジケーターを非表示
+        
+        // ネットワークエラー（fetch自体の失敗）もデバッグ情報に記録
+        // payloadが定義されていない場合のフォールバック
+        const errorPayload = typeof payload !== 'undefined' ? payload : {
+            text: text,
+            target_id: App.target.id,
+            error_context: 'payload_not_available'
+        };
+        recordApiCall('/api/chat', 'POST', errorPayload, null, e.message, null);
+        
         updateState('❌', 'Error', { error: e.message });
         addChatMessage('system', "エラー: " + e.message);
         showToast("エラー: " + e.message);
@@ -1213,21 +1409,40 @@ async function saveToDatabase(content) {
             if (val) properties[key] = val;
         });
         
+        const payload = {
+            target_db_id: App.target.id,
+            target_type: 'database',
+            text: content,
+            properties: properties
+        };
+        
         const res = await fetch('/api/save', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
+            body: JSON.stringify(payload)
+        });
+        
+        const data = await res.json().catch(() => ({}));
+        
+        // API通信を記録
+        recordApiCall('/api/save', 'POST', payload, data, 
+                     res.ok ? null : (data.detail || '保存に失敗しました'), 
+                     res.status);
+        
+        if (!res.ok) throw new Error(data.detail || '保存に失敗しました');
+        
+        showToast('✅ Notionに追加しました');
+    } catch(e) {
+        // ネットワークエラーの場合もrecordApiCallを呼び出す
+        if (e.message === 'Failed to fetch' || !e.response) {
+            const errorPayload = {
                 target_db_id: App.target.id,
                 target_type: 'database',
                 text: content,
                 properties: properties
-            })
-        });
-        
-        if (!res.ok) throw new Error('保存に失敗しました');
-        
-        showToast('✅ Notionに追加しました');
-    } catch(e) {
+            };
+            recordApiCall('/api/save', 'POST', errorPayload, null, e.message, null);
+        }
         showToast('エラー: ' + e.message);
     } finally {
         setLoading(false);
@@ -1238,21 +1453,40 @@ async function saveToPage(content) {
     setLoading(true, '保存中...');
     
     try {
+        const payload = {
+            target_db_id: App.target.id,
+            target_type: 'page',
+            text: content,
+            properties: {}
+        };
+        
         const res = await fetch('/api/save', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
+            body: JSON.stringify(payload)
+        });
+        
+        const data = await res.json().catch(() => ({}));
+        
+        // API通信を記録
+        recordApiCall('/api/save', 'POST', payload, data, 
+                     res.ok ? null : (data.detail || '保存に失敗しました'), 
+                     res.status);
+        
+        if (!res.ok) throw new Error(data.detail || '保存に失敗しました');
+        
+        showToast('✅ Notionに追加しました');
+    } catch(e) {
+        // ネットワークエラーの場合もrecordApiCallを呼び出す
+        if (e.message === 'Failed to fetch' || !e.response) {
+            const errorPayload = {
                 target_db_id: App.target.id,
                 target_type: 'page',
                 text: content,
                 properties: {}
-            })
-        });
-        
-        if (!res.ok) throw new Error('保存に失敗しました');
-        
-        showToast('✅ Notionに追加しました');
-    } catch(e) {
+            };
+            recordApiCall('/api/save', 'POST', errorPayload, null, e.message, null);
+        }
         showToast('エラー: ' + e.message);
     } finally {
         setLoading(false);
@@ -1796,15 +2030,38 @@ function openPromptModal() {
     }
     
     const modal = document.getElementById('promptModal');
-    const targetNameSpan = document.getElementById('modalTargetName');
+    const selector = document.getElementById('promptTargetSelect');
     const textarea = document.getElementById('promptTextarea');
     const saveBtn = document.getElementById('savePromptBtn');
     const resetBtn = document.getElementById('resetPromptBtn');
     
-    // ターゲット名を表示
-    targetNameSpan.textContent = App.target.name;
+    // ターゲットリストを読み込み（キャッシュから）
+    const cachedTargets = localStorage.getItem(App.cache.KEYS.TARGETS);
+    if (cachedTargets) {
+        try {
+            const data = JSON.parse(cachedTargets).data;
+            
+            // プロンプトモーダル用のターゲットリスト作成（新規作成オプションなし）
+            selector.innerHTML = '';
+            if (data.targets && data.targets.length > 0) {
+                data.targets.forEach(t => {
+                    const opt = document.createElement('option');
+                    opt.value = t.id;
+                    opt.textContent = `[${t.type === 'database' ? 'DB' : 'Page'}] ${t.title}`;
+                    opt.dataset.type = t.type;
+                    selector.appendChild(opt);
+                });
+                // 現在のターゲットを選択
+                selector.value = App.target.id;
+                // 初期選択を記録
+                selector.dataset.prevValue = App.target.id;
+            }
+        } catch(e) {
+            console.error('Failed to load targets for prompt modal:', e);
+        }
+    }
     
-    // カスタムプロンプトの有無を確認 (localStorage)
+    // 選択中のターゲットのプロンプトを表示
     const promptKey = `${App.cache.KEYS.PROMPT_PREFIX}${App.target.id}`;
     const savedPrompt = localStorage.getItem(promptKey);
     
@@ -1820,7 +2077,8 @@ function openPromptModal() {
     }
     
     // 現在のプロンプトまたはデフォルトを表示
-    textarea.value = App.target.systemPrompt || App.defaultPrompt;
+    textarea.value = savedPrompt || App.defaultPrompt;
+    promptOriginalValue = textarea.value; // 元の値を保存
     textarea.disabled = false;
     saveBtn.disabled = false;
     
@@ -1829,12 +2087,23 @@ function openPromptModal() {
 }
 
 function closePromptModal() {
+    const textarea = document.getElementById('promptTextarea');
+    // 変更がある場合は警告
+    if (textarea && textarea.value !== promptOriginalValue) {
+        if (!confirm('変更が保存されていません。\n閉じると変更が失われます。\n続行しますか？')) {
+            return;
+        }
+    }
+    
     const modal = document.getElementById('promptModal');
     modal.classList.add('hidden');
 }
 
 async function saveSystemPrompt() {
-    if (!App.target.id) return;
+    const selector = document.getElementById('promptTargetSelect');
+    const targetId = selector?.value || App.target.id;
+    
+    if (!targetId) return;
 
     const textarea = document.getElementById('promptTextarea');
     const saveBtn = document.getElementById('savePromptBtn');
@@ -1845,12 +2114,16 @@ async function saveSystemPrompt() {
     
     try {
         // デフォルトと異なる場合のみlocalStorageに保存
-        const promptKey = `${App.cache.KEYS.PROMPT_PREFIX}${App.target.id}`;
+        const promptKey = `${App.cache.KEYS.PROMPT_PREFIX}${targetId}`;
         
         if (newPrompt && newPrompt !== App.defaultPrompt) {
             // カスタムプロンプトを保存
             localStorage.setItem(promptKey, newPrompt);
-            App.target.systemPrompt = newPrompt;
+            
+            // 現在のターゲットと同じ場合はApp.target.systemPromptも更新
+            if (targetId === App.target.id) {
+                App.target.systemPrompt = newPrompt;
+            }
             
             // リセットボタンを表示
             if (resetBtn) {
@@ -1859,13 +2132,20 @@ async function saveSystemPrompt() {
         } else {
             // デフォルトと同じならカスタム設定を削除
             localStorage.removeItem(promptKey);
-            App.target.systemPrompt = null;
+            
+            // 現在のターゲットと同じ場合はApp.target.systemPromptも更新
+            if (targetId === App.target.id) {
+                App.target.systemPrompt = null;
+            }
             
             // リセットボタンを隠す
             if (resetBtn) {
                 resetBtn.classList.add('hidden');
             }
         }
+        
+        // 保存後、元の値を更新（ダーティフラグをクリア）
+        promptOriginalValue = newPrompt;
         
         showToast('✅ システムプロンプトを保存しました');
         closePromptModal(); // 保存後にモーダルを閉じる
@@ -1916,6 +2196,42 @@ document.addEventListener('DOMContentLoaded', () => {
     if (cancelPromptBtn) cancelPromptBtn.addEventListener('click', closePromptModal);
     if (savePromptBtn) savePromptBtn.addEventListener('click', saveSystemPrompt);
     if (resetPromptBtn) resetPromptBtn.addEventListener('click', resetSystemPrompt);
+
+    // ターゲット選択変更イベント
+    const promptTargetSelect = document.getElementById('promptTargetSelect');
+    if (promptTargetSelect) {
+        promptTargetSelect.addEventListener('change', (e) => {
+            const textarea = document.getElementById('promptTextarea');
+            const resetBtn = document.getElementById('resetPromptBtn');
+            
+            // 変更がある場合は警告
+            if (textarea.value !== promptOriginalValue) {
+                if (!confirm('変更が保存されていません。\n続行しますか？')) {
+                    // キャンセル時は元のターゲットに戻す
+                    e.target.value = e.target.dataset.prevValue || App.target.id;
+                    return;
+                }
+            }
+            
+            // 前回の選択を記録
+            e.target.dataset.prevValue = e.target.value;
+            
+            // 新しいターゲットのプロンプトを読み込み
+            const promptKey = `${App.cache.KEYS.PROMPT_PREFIX}${e.target.value}`;
+            const savedPrompt = localStorage.getItem(promptKey);
+            textarea.value = savedPrompt || App.defaultPrompt;
+            promptOriginalValue = textarea.value;
+            
+            // リセットボタンの表示制御
+            if (savedPrompt) {
+                resetBtn.disabled = false;
+                resetBtn.classList.remove('hidden');
+            } else {
+                resetBtn.disabled = true;
+                resetBtn.classList.remove('hidden');
+            }
+        });
+    }
 
     // プロンプトモーダルは外側クリックで閉じない（編集内容保護）
 

@@ -16,10 +16,17 @@ try:
 except ImportError:
     pass
 
+# ヘルパー関数: Notion ID正規化（1行版）
+def normalize_notion_id(notion_id_or_url: str) -> str:
+    """Notion IDまたはURLを32文字の英数字に正規化"""
+    import re
+    return re.sub(r'[^a-zA-Z0-9]', '', notion_id_or_url.split('/')[-1].split('?')[0].split('#')[0])[-32:] if notion_id_or_url else ""
+
 # --- Notion設定 (Notion Configuration) ---
 # Notion APIへのアクセスと、データ保存先のルートページID
 NOTION_API_KEY = os.getenv("NOTION_API_KEY")
-NOTION_ROOT_PAGE_ID = os.getenv("NOTION_ROOT_PAGE_ID")
+_raw_page_id = os.getenv("NOTION_ROOT_PAGE_ID")
+NOTION_ROOT_PAGE_ID = normalize_notion_id(_raw_page_id) if _raw_page_id else None
 
 # --- AIプロバイダー APIキー (AI Provider API Keys) ---
 # 各種LLMプロバイダーのAPIキー。使用しないプロバイダーは未設定で構いません。
@@ -54,11 +61,11 @@ DEBUG_MODE = os.getenv("DEBUG_MODE", "false").lower() == "true"
 # 環境変数でオーバーライド可能です。
 DEFAULT_SYSTEM_PROMPT = os.getenv(
     "DEFAULT_SYSTEM_PROMPT",
-    """優秀な秘書として、参考情報を参照しながら、以下のルールに従い柔軟に考えて返答すること。
+    """優秀な秘書として、参考情報を参照しながら、ユーザーの意図を予測し、以下のルールに従い柔軟に考えて返答すること。
 
-- 【回答できる場合、質問に回答する】
-    - 参照コンテキストから回答できる場合は秘書として回答する
-    - 例: 今日の予定は？→ 記録された予定を回答
+- 【質問の場合、回答する】
+    - 参照コンテキストから回答できる場合は秘書として柔軟に回答する
+    - 例: 今日の予定は？→ 予定を回答
 - 【回答できない場合、タスク名に変換】
     - 先頭に適切な絵文字を追加
     - 動詞で終わる明確なタスク名にする

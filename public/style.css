@@ -464,7 +464,7 @@ select[multiple].prop-input:hover {
     flex: 1;
     min-height: 36px;
     max-height: 120px;
-    padding: 8px 15px;
+    padding: 8px 45px 8px 15px;
     border: 1px solid #ddd;
     border-radius: 20px;
     resize: none;
@@ -474,11 +474,18 @@ select[multiple].prop-input:hover {
     background: #f9f9f9;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     overflow-y: hidden;
+    width: 100%;
 }
 
 .input-row textarea:focus {
     background: white;
     border-color: var(--line-green);
+}
+
+/* テキスト入力とスタンプボタンのラッパー */
+.input-wrapper {
+    flex: 1;
+    position: relative;
 }
 
 .btn-send {
@@ -539,16 +546,18 @@ select[multiple].prop-input:hover {
     background: #f5f5f5;
 }
 
-/* Emoji Button - LINE Style */
+/* Emoji/Stamp Button - テキストボックス内右側配置 */
 .btn-emoji {
-    flex-shrink: 0;
-    width: 40px;
-    height: 40px;
+    position: absolute;
+    right: 8px;
+    bottom: 4px;
+    width: 32px;
+    height: 32px;
     border-radius: 50%;
-    background: #f0f0f0;
+    background: transparent;
     color: #333;
     border: none;
-    font-size: 22px;
+    font-size: 20px;
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -556,116 +565,126 @@ select[multiple].prop-input:hover {
     transition: background 0.2s, transform 0.1s;
     line-height: 1;
     padding: 0;
+    z-index: 5;
 }
 
 .btn-emoji:hover {
-    background: #e5e5e5;
+    background: rgba(0, 0, 0, 0.1);
 }
 
 .btn-emoji:active {
     transform: scale(0.95);
 }
 
-/* Emoji Palette */
+/* Emoji Palette - LINE Style (slide up from bottom) */
 .emoji-palette {
-    position: absolute;
-    bottom: 70px;
-    right: 15px;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    max-width: 600px;
+    margin: 0 auto;
     background: white;
-    border-radius: 12px;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
-    padding: 12px;
-    z-index: 100;
+    border-radius: 16px 16px 0 0;
+    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.18);
+    padding: 16px;
+    z-index: 200;
     border: 1px solid #e0e0e0;
-    max-width: 320px;
+    border-bottom: none;
+    transform: translateY(100%);
+    transition: transform 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+}
+
+.emoji-palette:not(.hidden) {
+    transform: translateY(0);
 }
 
 .emoji-palette-header {
-    font-size: 12px;
-    color: #888;
-    margin-bottom: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #666;
+    margin-bottom: 12px;
     padding: 0 4px;
 }
 
 .emoji-grid {
     display: grid;
-    grid-template-columns: repeat(6, 1fr);
-    gap: 6px;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 8px;
+    max-height: 280px;
+    overflow-y: auto;
 }
 
 .emoji-btn {
-    width: 44px;
-    height: 44px;
+    width: 100%;
+    aspect-ratio: 1;
     background: transparent;
     border: none;
     border-radius: 8px;
-    font-size: 28px;
+    font-size: 32px;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     transition: background 0.15s, transform 0.1s;
-    padding: 0;
+    padding: 4px;
 }
 
 .emoji-btn:hover {
     background: #f0f0f0;
-    transform: scale(1.2);
+    transform: scale(1.15);
 }
 
 .emoji-btn:active {
     transform: scale(0.95);
 }
 
-/* スタンプ表示（吹き出しなしの大きな絵文字） */
+/* スタンプ表示（吹き出しなしの大きな絵文字・右側表示） */
 .chat-stamp {
     font-size: 64px;
     line-height: 1.2;
     padding: 8px;
     background: transparent;
     align-self: flex-end;
+    margin-left: auto;
+    margin-right: 0;
 }
 
-/* チャットコントロール */
-.chat-controls {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 10px 15px;
-    background: white;
-    border-top: 1px solid #eee;
+/* スタンプ表示（インライン用） */
+.stamp-display {
+    font-size: 64px;
+    line-height: 1;
+    display: block;
 }
 
-.checkbox-label {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 14px;
-    color: #666;
-    cursor: pointer;
-    user-select: none;
-}
-
-.checkbox-label input[type="checkbox"] {
-    cursor: pointer;
-    width: 16px;
-    height: 16px;
-}
-
-.btn-clear-session {
+/* 会話クリアボタン（チャットログ右下に浮遊表示） */
+.btn-clear-session-floating {
+    position: absolute;
+    bottom: 15px;
+    right: 15px;
     padding: 8px 16px;
-    background: #f0f0f0;
+    background: rgba(240, 240, 240, 0.95);
     color: #666;
-    border: none;
-    border-radius: 6px;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 20px;
     font-size: 13px;
     cursor: pointer;
-    transition: background 0.2s;
+    transition: all 0.2s;
     white-space: nowrap;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    z-index: 50;
+    backdrop-filter: blur(8px);
 }
 
-.btn-clear-session:hover {
-    background: #e5e5e5;
+.btn-clear-session-floating:hover {
+    background: rgba(229, 229, 229, 0.95);
+    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.2);
+    transform: translateY(-1px);
+}
+
+.btn-clear-session-floating:active {
+    transform: translateY(0);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
 }
 
 
@@ -1532,6 +1551,56 @@ select[multiple].prop-input:hover {
 .debug-error-text {
     background: #FFEBEE;
     color: #C62828;
+}
+
+/* プロンプトモーダル内のターゲット選択 */
+.modal-info {
+    margin-bottom: 16px;
+}
+
+.modal-info label {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #555;
+}
+
+#promptTargetSelect {
+    width: 100%;
+    padding: 10px 14px;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    background: #f8f9fa;
+    color: #333;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    outline: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    background-size: 20px;
+    padding-right: 40px;
+}
+
+#promptTargetSelect:hover {
+    border-color: var(--line-green);
+    background: white;
+}
+
+#promptTargetSelect:focus {
+    border-color: var(--line-green);
+    background: white;
+    box-shadow: 0 0 0 3px rgba(6, 199, 85, 0.1);
+}
+
+#promptTargetSelect option {
+    padding: 10px;
+    background: white;
+    color: #333;
 }
 
 /* ⚠️ ここまで削除（本番環境では） */
