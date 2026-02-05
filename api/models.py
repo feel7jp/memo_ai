@@ -20,42 +20,103 @@ _MODEL_CACHE = None
 # 同一モデルの複数バージョン（日付付きバリアント等）を除外し、
 # ユーザーが選びやすい主要モデルのみをリストアップ
 # 実際に利用可能なモデルのみを含める（404エラー回避）
+#
+# 調査結果（2026-02-05）:
+# - Gemini: -latest エイリアスを使用すると最新安定版にアクセス可能
+# - gemini-flash-latest → Gemini 3 Flash (2026年1月21日以降)
+# - gemini-pro-latest → Gemini 3 Pro (2026年1月21日以降)
+# - Gemini 2.5シリーズは2026年6月17日に退役予定だが現在利用可能
 RECOMMENDED_MODELS = [
-    # Gemini API - 推奨（実際に利用可能な安定版）
-    # Note: -latest サフィックスを使用すると最新の安定版にアクセス可能
-    "gemini/gemini-2.5-flash",      # 最新の高速モデル
-    "gemini/gemini-2.5-pro",        # 最新の高性能モデル
-    "gemini/gemini-2.0-flash-exp",  # 2.0 Flash実験版
-    "gemini/gemini-1.5-flash-latest",  # 1.5 Flash安定版（latestサフィックス）
-    "gemini/gemini-1.5-pro-latest",    # 1.5 Pro安定版（latestサフィックス）
+    # Gemini API - 推奨（LiteLLMドキュメントで確認済み）
+    "gemini/gemini-flash-latest",   # 最新Flash（Gemini 3へのエイリアス）
+    "gemini/gemini-pro-latest",     # 最新Pro（Gemini 3へのエイリアス）  
+    "gemini/gemini-2.5-flash",      # Gemini 2.5 Flash（2026/6まで）
+    "gemini/gemini-2.5-pro",        # Gemini 2.5 Pro（2026/6まで）
     
-    # OpenAI - 推奨（実際に利用可能）
-    "gpt-4o",           # 最新のGPT-4 Omni
+    # OpenAI - 推奨
+    "gpt-4o",           # GPT-4 Omni
     "gpt-4o-mini",      # 軽量版GPT-4o
     "gpt-4-turbo",      # GPT-4 Turbo
     "o1-mini",          # o1シリーズ軽量版
     "o3-mini",          # o3シリーズ軽量版
     
-    # Anthropic - 推奨（実際に利用可能）
-    "claude-3-5-sonnet-20241022",  # Claude 3.5 Sonnet（日付指定版）
-    "claude-3-5-haiku-20241022",   # Claude 3.5 Haiku（日付指定版）
-    "claude-3-opus-20240229",      # Claude 3 Opus（日付指定版）
+    # Anthropic - 推奨
+    "claude-3-5-sonnet-20241022",  # Claude 3.5 Sonnet
+    "claude-3-5-haiku-20241022",   # Claude 3.5 Haiku
+    "claude-3-opus-20240229",      # Claude 3 Opus
 ]
 
 
 def _build_model_registry() -> List[Dict[str, Any]]:
     """
-    LiteLLMの `model_cost` 辞書からモデルレジストリを構築します。
-    プロバイダーの種類（Gemini API vs Vertex AIなど）を自動検出し、
-    フロントエンドで表示しやすい形式に整形します。
+    モデルレジストリを構築します。
+    
+    **動的モデル発見**: Gemini APIから直接取得（ベストプラクティス対応）
+    - キャッシング: 1時間TTL
+    - エラーハンドリング: 静的リストへのフォールバック
+    - レート制限: 起動時1回のみ呼び出し
     """
     registry = []
     
+    # ===== Gemini: 動的取得（ベストプラクティス対応） =====
+    gemini_loaded_dynamically = False
+    try:
+        from api.model_discovery import get_gemini_models
+        
+        # Gemini APIから取得（内部でキャッシング、リトライ、レート制限対応）
+        gemini_models = get_gemini_models()
+        
+        if gemini_models and len(gemini_models) > 0:
+            registry.extend(gemini_models)
+            gemini_loaded_dynamically = True
+            print(f"[INFO] ✅ Added {len(gemini_models)} Gemini models from dynamic API")
+        else:
+            print(f"[WARNING] No Gemini models returned from API")
+            gemini_loaded_dynamically = False
+            
+    except ImportError as e:
+        print(f"[WARNING] google-genai package not installed: {e}")
+        print(f"[INFO] Install with: pip install -U google-genai")
+        gemini_loaded_dynamically = False
+        
+    except Exception as e:
+        print(f"[WARNING] Dynamic Gemini model loading failed: {type(e).__name__}: {e}")
+        print(f"[INFO] Falling back to static model list")
+        gemini_loaded_dynamically = False
+    
+    # ===== OpenAI: 動的取得（ベストプラクティス対応） =====
+    openai_loaded_dynamically = False
+    try:
+        from api.model_discovery import get_openai_models
+        
+        # OpenAI APIから取得（内部でキャッシング）
+        # APIキーがない場合は空リストを返す
+        openai_models = get_openai_models()
+        
+        if openai_models and len(openai_models) > 0:
+            registry.extend(openai_models)
+            openai_loaded_dynamically = True
+            print(f"[INFO] ✅ Added {len(openai_models)} OpenAI models from dynamic API")
+        else:
+            # APIキーなしの場合は静的リストにフォールバック
+            print(f"[INFO] No OpenAI models from API (static list will be used)")
+            openai_loaded_dynamically = False
+            
+    except ImportError as e:
+        print(f"[WARNING] openai package not installed: {e}")
+        print(f"[INFO] Install with: pip install -U openai")
+        openai_loaded_dynamically = False
+        
+    except Exception as e:
+        print(f"[WARNING] Dynamic OpenAI model loading failed: {type(e).__name__}: {e}")
+        print(f"[INFO] Falling back to static model list")
+        openai_loaded_dynamically = False
+    
+
     # LiteLLMが持つ全モデルのメタデータ（コスト、プロバイダー情報など）を取得
     model_cost_map = litellm.model_cost
     
     # プロバイダー表示名のマッピング
-    # 内部IDをユーザーフレンドリーな名称に変換します。
     PROVIDER_DISPLAY_NAMES = {
         "gemini": "Gemini API",
         "vertex_ai": "Vertex AI", 
@@ -65,13 +126,30 @@ def _build_model_registry() -> List[Dict[str, Any]]:
         "azure": "Azure OpenAI",
         "anthropic": "Anthropic",
     }
+
     
     # LiteLLMのレジストリに含まれる全モデルを走査
-    seen_models = {}  # モデルID重複チェック用
+    seen_models = {}  # モデルID重複チェック用（正規化された名前で管理）
     
     for model_id, model_info in model_cost_map.items():
-        # 重複チェック: 既に同じIDのモデルが登録されていればスキップ
-        if model_id in seen_models:
+        # Geminiモデルは動的取得できた場合のみスキップ
+        if gemini_loaded_dynamically and (model_id.startswith("gemini/") or "gemini" in model_id.lower()):
+            continue
+        
+        # OpenAIモデルは動的取得できた場合のみスキップ
+        if openai_loaded_dynamically and (model_id.startswith("openai/") or model_id.startswith("gpt") or "openai" in model_id.lower()):
+            continue
+        
+        # Geminiの古いバージョン（1.5/2.0）は常に除外
+        if "gemini-1.5" in model_id or "gemini-2.0" in model_id:
+            continue
+        
+        # モデル名を正規化（プレフィックスを除去）して重複チェック
+        # 例: "openai/gpt-4" -> "gpt-4"
+        normalized_name = model_id.split("/")[-1]
+        
+        # 重複チェック: 既に同じ正規化名のモデルが登録されていればスキップ
+        if normalized_name in seen_models:
             continue
             
         # メタデータからプロバイダーIDを取得
@@ -91,7 +169,7 @@ def _build_model_registry() -> List[Dict[str, Any]]:
                 # 未知のプロバイダーはスキップ
                 continue
         
-        # 表示名が定義されている主要プロバイダーのみリストに含める
+        # 表示名が定義されている主要プロバイダーのみリストに含める  
         if litellm_provider not in PROVIDER_DISPLAY_NAMES:
             continue
         
@@ -123,7 +201,7 @@ def _build_model_registry() -> List[Dict[str, Any]]:
         # レジストリエントリの作成
         entry = {
             "id": model_id,
-            "name": model_id.split("/")[-1],  # "gemini/gemini-pro" -> "gemini-pro"
+            "name": normalized_name,  # 正規化された名前を使用
             "provider": provider_display,  # 表示用プロバイダー名
             "litellm_provider": litellm_provider,  # ルーティング用プロバイダーID
             "supports_vision": supports_vision,
@@ -139,7 +217,7 @@ def _build_model_registry() -> List[Dict[str, Any]]:
             entry["rate_limit_note"] = model_info["rate_limit_note"]
         
         registry.append(entry)
-        seen_models[model_id] = True  # 重複チェック用に記録
+        seen_models[normalized_name] = True  # 重複チェック用に正規化名を記録
     
     # UI表示順序の調整: プロバイダー名 > モデル名でソート
     registry.sort(key=lambda x: (x["provider"], x["name"]))

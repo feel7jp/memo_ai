@@ -426,9 +426,30 @@ Restraints:
     
     # LLMの呼び出し（messages配列を渡す）
     print(f"[Chat AI] Calling LLM: {selected_model} with {len(messages)} messages")
-    result = await generate_json(messages, model=selected_model)
-    print(f"[Chat AI] LLM response received, length: {len(result['content'])}")
-    json_resp = result["content"]
+    
+    try:
+        result = await generate_json(messages, model=selected_model)
+        print(f"[Chat AI] LLM response received, length: {len(result['content'])}")
+        json_resp = result["content"]
+        
+    except Exception as e:
+        print(f"[Chat AI] LLM generation failed: {e}")
+        # エラーメッセージをユーザーに返す
+        error_msg = str(e)
+        user_msg = "申し訳ありません。AIの応答生成中にエラーが発生しました。"
+        
+        # APIキー関連のエラーの場合のヒント
+        if "API key" in error_msg or "auth" in error_msg.lower():
+            user_msg += "\n(APIキーが設定されていないか、正しくない可能性があります)"
+            
+        return {
+            "message": user_msg,
+            "raw_error": error_msg,
+            "properties": None,
+            "usage": {},
+            "cost": 0.0,
+            "model": selected_model
+        }
     
     # 応答データの解析
     try:

@@ -56,12 +56,6 @@
                 <span class="menu-icon">🔄</span>
                 <span>スーパーリロード</span>
             </button>
-            <div class="menu-divider"></div>
-            <div class="menu-info-item">
-                <span class="menu-icon">💰</span>
-                <span>推定コスト: <span id="sessionCost">$0.0000</span></span>
-            </div>
-
             <!-- ⚠️ 本番環境では以下を削除 -->
             <div class="menu-divider"></div>
             <button id="debugInfoMenuItem" class="menu-item debug-menu-item" style="display: none;">
@@ -305,6 +299,24 @@
                     <div class="modal-footer">
                         <button id="refreshDebugBtn" class="btn-secondary">🔄 再読み込み</button>
                         <button id="closeDebugBtn" class="btn-primary">閉じる</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 確認モーダル (Confirmation Modal) -->
+            <div id="confirmDiscardModal" class="modal hidden">
+                <div class="modal-content" style="max-width: 400px;">
+                    <div class="modal-header">
+                        <h2>変更の破棄</h2>
+                        <button id="closeConfirmDiscardModalBtn" class="close-btn">×</button>
+                    </div>
+                    <div class="modal-body">
+                        <p>変更が保存されていません。<br>保存せずに閉じますか？</p>
+                    </div>
+                    <div class="modal-footer">
+                        <button id="cancelDiscardBtn" class="btn-secondary">キャンセル</button>
+                        <button id="confirmDiscardBtn" class="btn-primary"
+                            style="background-color: #ff4d4f; border-color: #ff4d4f;">変更を破棄</button>
                     </div>
                 </div>
             </div>

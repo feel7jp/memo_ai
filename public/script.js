@@ -57,7 +57,8 @@ const App = {
         enabled: false,
         serverMode: false,
         showModelInfo: true,
-        lastApiCall: null
+        lastApiCall: null,
+        lastModelList: null
     },
     
     // デフォルトプロンプト
@@ -491,8 +492,11 @@ function renderDebugInfo(data) {
     
     // モデル情報
     if (data.models) {
+        // デバッグ用に保存（コピー機能用）
+        App.debug.lastModelList = data.models.raw_list;
+
         html += '<div class="debug-section">';
-        html += `<h3>📋 モデル一覧 (${data.models.recommended_count} 推奨 / ${data.models.total_count} 全モデル)</h3>`;
+        html += `<h3>📋 モデル一覧 (${data.models.recommended_count} 推奨 / ${data.models.total_count} 全モデル) <button class="btn-copy-debug" onclick="copyModelList()">📋 コピー</button></h3>`;
         html += '<details style="margin-top: 8px;">';
         html += '<summary style="cursor: pointer; padding: 8px; background: var(--bg-secondary); border-radius: 4px;">全モデル生データを表示...</summary>';
         html += `<pre class="debug-code" style="max-height: 400px; overflow: auto; margin-top: 8px;">${JSON.stringify(data.models.raw_list, null, 2).replace(/</g, '&lt;')}</pre>`;
@@ -501,6 +505,16 @@ function renderDebugInfo(data) {
     }
     
     content.innerHTML = html;
+}
+
+/**
+ * モデルリストの生データをコピー
+ */
+function copyModelList() {
+    if (!App.debug.lastModelList) { showToast('コピーするデータがありません'); return; }
+    navigator.clipboard.writeText(JSON.stringify(App.debug.lastModelList, null, 2))
+        .then(() => showToast('モデルデータをコピーしました'))
+        .catch(() => showToast('コピー失敗'));
 }
 
 /**
@@ -2085,25 +2099,19 @@ function openPromptModal() {
     const promptKey = `${App.cache.KEYS.PROMPT_PREFIX}${App.target.id}`;
     const savedPrompt = localStorage.getItem(promptKey);
     
-    // リセットボタン: カスタム設定がある場合のみ有効化
+    // リセットボタン: 常に有効化
     if (resetBtn) {
-        if (savedPrompt) {
-            resetBtn.disabled = false;
-            resetBtn.classList.remove('hidden');
-        } else {
-            resetBtn.disabled = true;
-            resetBtn.classList.remove('hidden'); // 常に表示
-        }
+        resetBtn.disabled = false;
+        resetBtn.classList.remove('hidden');
     }
     
-    // カスタムプロンプトがあれば表示、なければ空（デフォルト使用）
+    // カスタムプロンプトがあれば表示、なければデフォルトを表示
     if (savedPrompt) {
         textarea.value = savedPrompt;
-        textarea.placeholder = 'システムプロンプトを入力してください...';
     } else {
-        textarea.value = '';
-        textarea.placeholder = 'デフォルトのプロンプトを使用します（カスタマイズする場合はここに入力）';
+        textarea.value = App.defaultPrompt;
     }
+    textarea.placeholder = 'システムプロンプトを入力してください...';
     
     promptOriginalValue = textarea.value; // 元の値を保存
     textarea.disabled = false;
@@ -2113,13 +2121,41 @@ function openPromptModal() {
     modal.classList.remove('hidden');
 }
 
+// 破棄確認モーダルの制御
+function showDiscardConfirmation(onConfirm) {
+    const modal = document.getElementById('confirmDiscardModal');
+    const confirmBtn = document.getElementById('confirmDiscardBtn');
+    const cancelBtn = document.getElementById('cancelDiscardBtn');
+    const closeBtn = document.getElementById('closeConfirmDiscardModalBtn');
+    
+    // イベントリスナーの一時的な登録（クリーンアップが必要）
+    const cleanup = () => {
+        confirmBtn.onclick = null;
+        cancelBtn.onclick = null;
+        closeBtn.onclick = null;
+        modal.classList.add('hidden');
+    };
+    
+    confirmBtn.onclick = () => {
+        cleanup();
+        onConfirm();
+    };
+    
+    cancelBtn.onclick = cleanup;
+    closeBtn.onclick = cleanup;
+    
+    modal.classList.remove('hidden');
+}
+
 function closePromptModal() {
     const textarea = document.getElementById('promptTextarea');
     // 変更がある場合は警告
     if (textarea && textarea.value !== promptOriginalValue) {
-        if (!confirm('変更が保存されていません。\n閉じると変更が失われます。\n続行しますか？')) {
-            return;
-        }
+        showDiscardConfirmation(() => {
+            const modal = document.getElementById('promptModal');
+            modal.classList.add('hidden');
+        });
+        return;
     }
     
     const modal = document.getElementById('promptModal');
@@ -2190,28 +2226,11 @@ async function saveSystemPrompt() {
 }
 
 function resetSystemPrompt() {
-    if (!App.target.id) return;
-    
-    const promptKey = `${App.cache.KEYS.PROMPT_PREFIX}${App.target.id}`;
-    localStorage.removeItem(promptKey); // 設定を削除
-    App.target.systemPrompt = null;
-    
-    // テキストエリアを空にする（デフォルトを使用することを示す）
     const textarea = document.getElementById('promptTextarea');
     if (textarea) {
-        textarea.value = ''; // 空白にして、デフォルト使用を明示
-        textarea.placeholder = 'デフォルトのプロンプトを使用します';
-        // 元の値も更新してダーティフラグをクリア
-        promptOriginalValue = '';
+        textarea.value = App.defaultPrompt;
+        showToast('デフォルトのテキストを入力しました');
     }
-    
-    // リセットボタンを無効化
-    const resetBtn = document.getElementById('resetPromptBtn');
-    if (resetBtn) {
-        resetBtn.disabled = true;
-    }
-    
-    showToast('✅ デフォルトに戻しました');
 }
 
 
@@ -2240,41 +2259,48 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // 変更がある場合は警告
             if (textarea.value !== promptOriginalValue) {
-                if (!confirm('変更が保存されていません。\n続行しますか？')) {
-                    // キャンセル時は元のターゲットに戻す
-                    e.target.value = e.target.dataset.prevValue || App.target.id;
-                    return;
-                }
+                // カスタム確認モーダルを使用
+                showDiscardConfirmation(() => {
+                    // 確認が取れたらターゲット切り替えを実行
+                    e.target.dataset.prevValue = e.target.value;
+                    loadPromptForTarget(e.target.value);
+                });
+                
+                // 一旦、変更前の値に戻す（確認待ち）
+                e.target.value = e.target.dataset.prevValue || App.target.id;
+                return;
             }
             
-            // 前回の選択を記録
+            // 変更がない場合はそのまま切り替え
             e.target.dataset.prevValue = e.target.value;
-            
-            // 新しいターゲットのプロンプトを読み込み
-            const promptKey = `${App.cache.KEYS.PROMPT_PREFIX}${e.target.value}`;
-            const savedPrompt = localStorage.getItem(promptKey);
-            
-            // カスタムプロンプトがあれば表示、なければ空（デフォルト使用）
-            if (savedPrompt) {
-                textarea.value = savedPrompt;
-                textarea.placeholder = 'システムプロンプトを入力してください...';
-            } else {
-                textarea.value = '';
-                textarea.placeholder = 'デフォルトのプロンプトを使用します（カスタマイズする場合はここに入力）';
-            }
-            promptOriginalValue = textarea.value;
-            
-            // リセットボタンの表示制御
-            if (savedPrompt) {
-                resetBtn.disabled = false;
-                resetBtn.classList.remove('hidden');
-            } else {
-                resetBtn.disabled = true;
-                resetBtn.classList.remove('hidden');
-            }
+            loadPromptForTarget(e.target.value);
         });
     }
 
+    // ターゲットプロンプト読み込み処理の分離
+    function loadPromptForTarget(targetId) {
+        const textarea = document.getElementById('promptTextarea');
+        const resetBtn = document.getElementById('resetPromptBtn');
+        
+        const promptKey = `${App.cache.KEYS.PROMPT_PREFIX}${targetId}`;
+        const savedPrompt = localStorage.getItem(promptKey);
+        
+        // カスタムプロンプトがあれば表示、なければデフォルトを表示
+        if (savedPrompt) {
+            textarea.value = savedPrompt;
+        } else {
+            textarea.value = App.defaultPrompt;
+        }
+        textarea.placeholder = 'システムプロンプトを入力してください...';
+        promptOriginalValue = textarea.value;
+        
+        // リセットボタンの表示制御
+        if (resetBtn) {
+            resetBtn.disabled = false;
+            resetBtn.classList.remove('hidden');
+        }
+    }  // loadPromptForTarget関数の終了
+    
     // プロンプトモーダルは外側クリックで閉じない（編集内容保護）
 
     // ESCキーで閉じる
@@ -2453,30 +2479,26 @@ function toggleSettingsMenu() {
 
 async function loadAvailableModels() {
     try {
-        // 推奨モデルを取得
-        const res = await fetch('/api/models');
+        // 全モデルを取得（推奨・非推奨の両方）
+        const res = await fetch('/api/models?all=true');
         if (!res.ok) throw new Error('Failed to load models');
         
         const data = await res.json();
         
-        // モデルの分類とデフォルト設定
-        App.model.available = data.all || [];  // 推奨モデル（デフォルト表示）
+        // 全モデルを保存
+        App.model.allModels = data.all || [];
+        
+        // 推奨モデルのみをフィルタリング（デフォルト表示用）
+        App.model.available = App.model.allModels.filter(m => m.recommended !== false);
+        
+        // その他の設定
         App.model.textOnly = data.text_only || [];
         App.model.vision = data.vision_capable || [];
         App.model.defaultText = data.defaults?.text;
         App.model.defaultMultimodal = data.defaults?.multimodal;
-        
-        // 全モデルも取得（バックグラウンドで）
-        App.model.allModels = [];  // 全モデル（トグル時に使用）
         App.model.showAllModels = false;  // デフォルトは推奨のみ表示
         
-        fetch('/api/models?all=true')
-            .then(r => r.json())
-            .then(allData => {
-                App.model.allModels = allData.all || [];
-                console.log("All models loaded:", App.model.allModels.length);
-            })
-            .catch(err => console.warn('Failed to load all models:', err));
+        console.log(`Loaded ${App.model.available.length} recommended models, ${App.model.allModels.length} total models`);
         
         // デフォルトモデルの警告チェック
         if (data.warnings && data.warnings.length > 0) {
@@ -2618,11 +2640,22 @@ function createModelItem(model) {
     const isSelected = model.id === App.model.tempSelected;
     if (isSelected) item.classList.add('selected');
     
+    // 非推奨モデルのスタイル
+    const isNotRecommended = model.recommended === false;
+    if (isNotRecommended) {
+        item.classList.add('not-recommended');
+    }
+    
     // Vision対応アイコン
     const visionIcon = model.supports_vision ? ' 📷' : '';
     
     // [Provider] モデル名 [📷]
     const displayName = `[${model.provider}] ${model.name}${visionIcon}`;
+    
+    // 非推奨バッジ（model_typeがあれば表示）
+    const notRecommendedBadge = isNotRecommended && model.model_type
+        ? `<div class="model-badge not-recommended">⚠️ 非推奨 (${model.model_type})</div>`
+        : '';
     
     // レートリミット注意書き
     const rateLimitBadge = model.rate_limit_note 
@@ -2648,6 +2681,7 @@ function createModelItem(model) {
     item.innerHTML = `
         <div class="model-info">
             <div class="model-name">${displayName}${pricingText}</div>
+            ${notRecommendedBadge}
             ${rateLimitBadge}
         </div>
         <span class="model-check">${isSelected ? '✓' : ''}</span>

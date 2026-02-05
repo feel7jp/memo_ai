@@ -15,7 +15,6 @@ class SimpleRateLimiter:
     def __init__(self):
         self.enabled = os.getenv("RATE_LIMIT_ENABLED", "true").lower() == "true"
         self.global_per_hour = int(os.getenv("RATE_LIMIT_GLOBAL_PER_HOUR", "1000"))
-        self.cleanup_interval = int(os.getenv("RATE_LIMIT_CLEANUP_INTERVAL", "300"))
         
         # グローバルカウンター
         self.global_log: Dict[str, List[float]] = defaultdict(list)
@@ -60,11 +59,13 @@ class SimpleRateLimiter:
         self.global_log[key].append(now)
     
     def _cleanup_old_entries(self):
-        """古いエントリを定期的に削除してメモリを節約"""
+        """古いエントリを定期的に削除してメモリを節約（1時間ごと）"""
         now = time.time()
-        if now - self.last_cleanup < self.cleanup_interval:
+        cleanup_interval = 3600  # 1時間ごとにクリーンアップ
+        if now - self.last_cleanup < cleanup_interval:
             return
         
+        # 2時間以上古いデータを削除
         for key in list(self.global_log.keys()):
             self.global_log[key] = [t for t in self.global_log[key] if t > now - 7200]
             if not self.global_log[key]:

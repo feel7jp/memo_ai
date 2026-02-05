@@ -101,6 +101,51 @@ async def lifespan(app: FastAPI):
     
     print("=" * 70)
     
+    # JavaScriptファイルの構文チェック（ローカル環境のみ）
+    if not is_vercel:
+        print("\n🔍 JavaScriptファイルの構文チェック中...")
+        try:
+            import subprocess
+            import glob
+            
+            js_files = glob.glob("public/*.js")
+            syntax_errors = []
+            
+            for js_file in js_files:
+                try:
+                    result = subprocess.run(
+                        ["node", "--check", js_file],
+                        capture_output=True,
+                        text=True,
+                        timeout=5
+                    )
+                    if result.returncode != 0:
+                        syntax_errors.append(f"  ❌ {js_file}: {result.stderr.strip()}")
+                    else:
+                        print(f"  ✅ {js_file}: OK")
+                except FileNotFoundError:
+                    print("  ⚠️  Node.js が見つかりません。構文チェックをスキップします。")
+                    break
+                except subprocess.TimeoutExpired:
+                    syntax_errors.append(f"  ⏱️  {js_file}: タイムアウト")
+                except Exception as e:
+                    syntax_errors.append(f"  ⚠️  {js_file}: {str(e)}")
+            
+            if syntax_errors:
+                print("\n" + "=" * 70)
+                print("⚠️  JavaScript構文エラーが検出されました:")
+                for error in syntax_errors:
+                    print(error)
+                print("=" * 70 + "\n")
+            else:
+                if js_files:
+                    print(f"  ✅ すべてのJavaScriptファイル ({len(js_files)}個) の構文チェックに合格しました\n")
+                    
+        except Exception as e:
+            print(f"  ⚠️  構文チェック中にエラーが発生: {e}\n")
+    
+    print("=" * 70)
+    
     # ローカルIPアドレスの取得と起動URL表示
     # スマホなどから同じネットワーク内のPCで動いているサーバーにアクセスする際のURLを表示します。
     if not is_vercel:
@@ -698,12 +743,7 @@ async def analyze(request: Request, analyze_req: AnalyzeRequest):
             model=analyze_req.model
         )
         # 結果にはAIの回答だけでなく、トークン消費量やコスト情報も含まれる場合があります。
-        # レスポンスにレート制限ヘッダーを追加
-        from fastapi.responses import JSONResponse
-        return JSONResponse(
-            content=result,
-            headers=rate_limit_headers
-        )
+        return result
     except httpx.ReadTimeout:
         # Notion APIやAI APIのタイムアウト処理
         raise HTTPException(
@@ -807,12 +847,7 @@ async def chat_endpoint(request: Request, chat_req: ChatRequest):
                 model=chat_req.model
             )
             print(f"[Chat] AI response received, model used: {result.get('model')}")
-            # レスポンスにレート制限ヘッダーを追加
-            from fastapi.responses import JSONResponse
-            return JSONResponse(
-                content=result,
-                headers=rate_limit_headers
-            )
+            return result
         except httpx.ReadTimeout:
             raise HTTPException(
                 status_code=504,

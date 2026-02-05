@@ -1214,6 +1214,12 @@ select[multiple].prop-input:hover {
     border: 1px solid #ffeeba;
 }
 
+.model-badge.not-recommended {
+    background: #f5f5f5;
+    color: #ff8c00;
+    border: 1px solid #ddd;
+}
+
 .model-badge.recommended {
     background: #d4edda;
     color: #155724;
