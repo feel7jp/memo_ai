@@ -118,6 +118,16 @@ www.notion.so/memoAI-2e137XXXXXXXXXXXXXff733 　　->　　 2e137XXXXXXXXXXXXXff
 python -m uvicorn api.index:app --reload --host 0.0.0.0
 ```
 
+### デバッグモード
+デバッグモードで起動したい場合は、`.env`ファイルに以下を追加してから起動してください：
+
+```env
+DEBUG_MODE=true
+```
+
+> **💡 デバッグモードでできること:**  
+> デバッグモードを有効にすると、フロントエンドの設定メニューからデバッグ情報（環境変数、ファイルパス、ルート情報など）を確認できます。
+
 ---
 
 ### ❓ よくあるエラーと対処法
@@ -138,26 +148,6 @@ pip install -r requirements.txt
 **プロセスを終了:**
 ```bash
 lsof -ti:8000 | xargs kill -9  # Mac/Linux
-```
-
-**別のポートを使用:**
-```bash
-# ポート番号を変更する場合は、PORT環境変数も設定してください
-# (起動メッセージで正しいポート番号が表示されます)
-
-# Mac/Linux (python3の場合)
-PORT=8001 python3 -m uvicorn api.index:app --reload --host 0.0.0.0 --port 8001
-
-# Mac/Linux (pythonの場合)
-PORT=8001 python -m uvicorn api.index:app --reload --host 0.0.0.0 --port 8001
-
-# Windows (コマンドプロンプト)
-set PORT=8001 && python3 -m uvicorn api.index:app --reload --host 0.0.0.0 --port 8001
-
-# Windows (PowerShell)
-$env:PORT=8001; python3 -m uvicorn api.index:app --reload --host 0.0.0.0 --port 8001
-
-# http://localhost:8001 でアクセス
 ```
 
 ---

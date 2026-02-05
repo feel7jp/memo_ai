@@ -1,64 +1,76 @@
+// ========== STATE ==========
+// アプリケーション全体の状態を一元管理
 
-// --- デバッグモード設定 (Debug Mode) ---
-// 本番環境では false に設定してください
-const DEBUG_MODE = false;
-
-// デバッグログ用ヘルパー関数
-function debugLog(...args) {
-    if (DEBUG_MODE) {
-        console.log(...args);
-    }
-}
-
-// --- キャッシュ設定 (Cache Settings) ---
-// リクエスト数を削減し、レスポンス速度を向上させるためにブラウザの localStorage を利用します。
-const CACHE_TTL = 180000; // 3分 (ミリ秒): キャッシュの有効期限
-const TARGETS_CACHE_KEY = 'memo_ai_targets';
-const SCHEMA_CACHE_PREFIX = 'memo_ai_schema_';
-const DRAFT_KEY = 'memo_ai_draft';               // 入力中の下書き保存用キー
-const LAST_TARGET_KEY = 'memo_ai_last_target';   // 最後に選択したターゲットID
-const CHAT_HISTORY_KEY = 'memo_ai_chat_history'; // チャット履歴
-const LOCAL_PROMPT_PREFIX = 'memo_ai_prompt_';   // システムプロンプト（ターゲット毎）
-const SHOW_MODEL_INFO_KEY = 'memo_ai_show_model_info';
-const REFERENCE_PAGE_KEY = 'memo_ai_reference_page'; // 「ページを参照」チェックボックスの状態
-
-// デフォルトのシステムプロンプト
-// AIの基本的な役割定義。ターゲットごとに上書き可能です。
-// Note: バックエンドの /api/config から取得します（api/config.py で一元管理）
-let DEFAULT_SYSTEM_PROMPT = `優秀な秘書として、ユーザーのタスクを明確にする手伝いをすること。
+const App = {
+    // キャッシュ設定
+    cache: {
+        TTL: 180000,
+        KEYS: {
+            TARGETS: 'memo_ai_targets',
+            SCHEMA_PREFIX: 'memo_ai_schema_',
+            DRAFT: 'memo_ai_draft',
+            LAST_TARGET: 'memo_ai_last_target',
+            CHAT_HISTORY: 'memo_ai_chat_history',
+            PROMPT_PREFIX: 'memo_ai_prompt_',
+            SHOW_MODEL_INFO: 'memo_ai_show_model_info',
+            REFERENCE_PAGE: 'memo_ai_reference_page'
+        }
+    },
+    
+    // ターゲット（Notion DB/Page）
+    target: {
+        id: null,
+        name: '',
+        type: 'database',
+        schema: null,
+        previewData: null,
+        systemPrompt: null
+    },
+    
+    // チャット状態
+    chat: {
+        history: [],      // UI表示用
+        session: [],      // AI送信用コンテキスト
+        isComposing: false
+    },
+    
+    // 画像状態
+    image: {
+        base64: null,
+        mimeType: null
+    },
+    
+    // モデル状態
+    model: {
+        available: [],
+        textOnly: [],
+        vision: [],
+        defaultText: null,
+        defaultMultimodal: null,
+        current: null,
+        tempSelected: null,
+        sessionCost: 0.0
+    },
+    
+    // デバッグ
+    debug: {
+        enabled: false,
+        serverMode: false,
+        showModelInfo: true,
+        lastApiCall: null
+    },
+    
+    // デフォルトプロンプト
+    defaultPrompt: `優秀な秘書として、ユーザーのタスクを明確にする手伝いをすること。
 明確な実行できる タスク名に言い換えて。先頭に的確な絵文字を追加して
 画像の場合は、そこから何をしようとしているのか推定して、タスクにして。
 会話的な返答はしない。
-返答は機械的に、タスク名としてふさわしい文字列のみを出力すること。`;
+返答は機械的に、タスク名としてふさわしい文字列のみを出力すること。`
+};
 
-// --- グローバル状態管理 (Global State) ---
-let chatHistory = [];  // UI表示用の全チャット履歴: [{type, message, properties, timestamp}]
-let chatSession = [];  // AIに送信する短期会話コンテキスト: {role, content}
-let currentTargetId = null;       // 現在選択中のNotionターゲットID
-let currentTargetName = '';       // 現在選択中のターゲット名
-let currentTargetType = 'database'; // 'database' または 'page'
-let currentSchema = null;         // Notionデータベースのスキーマ構造
-let currentPreviewData = null;    // タグサジェスト用のプレビューデータ
-let currentSystemPrompt = null;   // 現在適用されているシステムプロンプト
-let isComposing = false;          // IME入力中かどうか（Enter送信の制御に使用）
+// デバッグログ
+function debugLog(...args) { if (App.debug.enabled) console.log(...args); }
 
-// --- 画像入力状態 (Image State) ---
-let currentImageBase64 = null;    // 送信待機中の画像データ（Base64文字列）
-let currentImageMimeType = null;  // 画像のMIMEタイプ (image/jpeg, image/png 等)
-
-// --- モデル & コスト管理 (Model & Cost State) ---
-let availableModels = [];         // 利用可能な全モデルリスト
-let textOnlyModels = [];          // テキスト専用モデルリスト
-let visionModels = [];            // 画像認識対応モデルリスト
-let defaultTextModel = null;      // デフォルトのテキストモデル
-let defaultMultimodalModel = null; // デフォルトの画像対応モデル
-let currentModel = null;          // 現在ユーザーが選択しているモデル（nullなら自動選択）
-let tempSelectedModel = null;     // 設定モーダルでの一時選択状態
-let sessionCost = 0.0;            // 現在のセッションでの推定コスト合計
-
-// --- デバッグモード (Debug Mode) ---
-let serverDebugMode = false;      // サーバーのDEBUG_MODE状態（/api/configから取得）
-let showModelInfo = true;         // チャットバブルにモデル情報を表示するかどうか
 
 document.addEventListener('DOMContentLoaded', () => {
     // === 初期化処理 (Initialization) ===
@@ -169,7 +181,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // 1. ラストラフ（下書き）の復元
     // ブラウザのlocalStorageから編集中のテキストを復元します。
-    const savedDraft = localStorage.getItem(DRAFT_KEY);
+    const savedDraft = localStorage.getItem(App.cache.KEYS.DRAFT);
     if (savedDraft) {
         memoInput.value = savedDraft;
         // 高さ調整のためにinputイベントを発火
@@ -183,7 +195,7 @@ document.addEventListener('DOMContentLoaded', () => {
         memoInput.style.height = Math.min(memoInput.scrollHeight, 120) + 'px';
         
         // 入力のたびに下書き保存
-        localStorage.setItem(DRAFT_KEY, memoInput.value);
+        localStorage.setItem(App.cache.KEYS.DRAFT, memoInput.value);
         updateSaveStatus("下書き保存中...");
     });
     
@@ -198,7 +210,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // 4. Enterキーハンドラ
     memoInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey && !isComposing) {
+        if (e.key === 'Enter' && !e.shiftKey && !App.chat.isComposing) {
             e.preventDefault();
             handleChatAI();
         }
@@ -214,16 +226,16 @@ document.addEventListener('DOMContentLoaded', () => {
     loadAvailableModels();
     
     // 7.5 Load Settings
-    const savedShowInfo = localStorage.getItem(SHOW_MODEL_INFO_KEY);
+    const savedShowInfo = localStorage.getItem(App.cache.KEYS.SHOW_MODEL_INFO);
     if (savedShowInfo !== null) {
-        showModelInfo = savedShowInfo === 'true';
+        App.debug.showModelInfo = savedShowInfo === 'true';
     }
     const showInfoToggle = document.getElementById('showModelInfoToggle');
     if (showInfoToggle) {
-        showInfoToggle.checked = showModelInfo;
+        showInfoToggle.checked = App.debug.showModelInfo;
         showInfoToggle.addEventListener('change', (e) => {
-            showModelInfo = e.target.checked;
-            localStorage.setItem(SHOW_MODEL_INFO_KEY, showModelInfo);
+            App.debug.showModelInfo = e.target.checked;
+            localStorage.setItem(App.cache.KEYS.SHOW_MODEL_INFO, App.debug.showModelInfo);
             renderChatHistory(); // Re-render to show/hide info
         });
     }
@@ -231,13 +243,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // Reference Page Toggle Logic
     const referenceToggle = document.getElementById('referencePageToggle');
     if (referenceToggle) {
-        const savedRefState = localStorage.getItem(REFERENCE_PAGE_KEY);
+        const savedRefState = localStorage.getItem(App.cache.KEYS.REFERENCE_PAGE);
         if (savedRefState !== null) {
             referenceToggle.checked = savedRefState === 'true';
         }
         
         referenceToggle.addEventListener('change', (e) => {
-            localStorage.setItem(REFERENCE_PAGE_KEY, e.target.checked);
+            localStorage.setItem(App.cache.KEYS.REFERENCE_PAGE, e.target.checked);
         });
     }
     
@@ -290,7 +302,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (value === '__NEW_PAGE__') {
             openNewPageModal();
             // 前の選択に戻す
-            const lastSelected = localStorage.getItem(LAST_TARGET_KEY);
+            const lastSelected = localStorage.getItem(App.cache.KEYS.LAST_TARGET);
             if (lastSelected) {
                 e.target.value = lastSelected;
             }
@@ -386,96 +398,67 @@ async function loadDebugInfo() {
 
 
 /**
- * デバッグ情報をHTMLとしてレンダリング
+ * デバッグ情報をHTMLとしてレンダリング（シンプル版）
  */
 function renderDebugInfo(data) {
     const content = document.getElementById('debugInfoContent');
     if (!content) return;
     
-    let html = '';
+    let html = `<div class="debug-timestamp">取得時刻: ${data.timestamp || 'N/A'}</div>`;
     
-    // タイムスタンプ
-    html += `<div class="debug-timestamp">取得時刻: ${data.timestamp || 'N/A'}</div>`;
+    // 最新API通信
+    html += '<div class="debug-section">';
+    html += '<h3>📡 最新API通信 <button class="btn-copy-debug" onclick="copyLastApiCall()">📋 コピー</button></h3>';
+    if (App.debug.lastApiCall) {
+        html += `<pre class="debug-code">${JSON.stringify(App.debug.lastApiCall, null, 2).replace(/</g, '&lt;')}</pre>`;
+    } else {
+        html += '<p class="debug-hint">まだAPI通信がありません。</p>';
+    }
+    html += '</div>';
     
     // 環境情報
-    html += '<div class="debug-section">';
-    html += '<h3>⚙️ 環境情報</h3>';
-    html += '<div class="debug-grid">';
+    html += '<div class="debug-section"><h3>⚙️ 環境情報</h3><div class="debug-grid">';
     for (const [key, value] of Object.entries(data.environment || {})) {
-        html += `
-            <div class="debug-item">
-                <span class="debug-label">${key}:</span>
-                <span class="debug-value">${value}</span>
-            </div>
-        `;
+        html += `<div class="debug-item"><span class="debug-label">${key}:</span><span class="debug-value">${value}</span></div>`;
     }
     html += '</div></div>';
     
-    // パス情報
-    html += '<div class="debug-section">';
-    html += '<h3>📁 パス情報</h3>';
-    html += '<div class="debug-grid">';
-    for (const [key, value] of Object.entries(data.paths || {})) {
-        html += `
-            <div class="debug-item">
-                <span class="debug-label">${key}:</span>
-                <code class="debug-path">${value}</code>
-            </div>
-        `;
-    }
-    html += '</div></div>';
-    
-    // ファイルシステム
-    html += '<div class="debug-section">';
-    html += '<h3>🗂️ ファイルシステム</h3>';
-    html += '<div class="debug-list">';
-    for (const [path, info] of Object.entries(data.filesystem_checks || {})) {
-        const status = info.exists ? '✅' : '❌';
-        const statusClass = info.exists ? 'exists' : 'missing';
-        html += `
-            <div class="debug-fs-item ${statusClass}">
-                <div class="debug-fs-header">
-                    <span class="debug-fs-status">${status}</span>
-                    <code class="debug-fs-path">${path}</code>
-                </div>
-                ${info.exists ? `<div class="debug-fs-details">${info.is_dir ? 'ディレクトリ' : `ファイル (${info.size} bytes)`}</div>` : ''}
-            </div>
-        `;
-    }
-    html += '</div></div>';
-    
-    // 環境変数（マスク済み）
+    // 環境変数
     if (data.env_vars) {
-        html += '<div class="debug-section">';
-        html += '<h3>🔐 環境変数（マスク済み）</h3>';
-        html += '<div class="debug-grid">';
+        html += '<div class="debug-section"><h3>🔐 環境変数</h3><div class="debug-grid">';
         for (const [key, value] of Object.entries(data.env_vars)) {
-            html += `
-                <div class="debug-item">
-                    <span class="debug-label">${key}:</span>
-                    <code class="debug-value">${value || 'null'}</code>
-                </div>
-            `;
+            html += `<div class="debug-item"><span class="debug-label">${key}:</span><code class="debug-value">${value || 'null'}</code></div>`;
         }
         html += '</div></div>';
     }
     
-    // ルート情報
-    html += '<div class="debug-section">';
-    html += '<h3>🛣️ 登録ルート</h3>';
-    html += '<div class="debug-routes">';
-    (data.routes || []).forEach(route => {
-        html += `
-            <div class="debug-route-item">
-                <code class="debug-route-path">${route.path}</code>
-                <span class="debug-route-methods">${route.methods.join(', ')}</span>
-                <span class="debug-route-name">${route.name}</span>
-            </div>
-        `;
-    });
-    html += '</div></div>';
-    
     content.innerHTML = html;
+}
+
+/**
+ * API通信を記録（シンプル版）
+ */
+function recordApiCall(endpoint, method, request, response, error = null, status = null) {
+    App.debug.lastApiCall = {
+        timestamp: new Date().toISOString(),
+        endpoint, method, status, error,
+        request: JSON.parse(JSON.stringify(request, (k, v) => 
+            (k === 'image_data' && typeof v === 'string') ? `[Image: ${v.length} chars]` : v
+        )),
+        response: JSON.parse(JSON.stringify(response, (k, v) => 
+            (k === 'image_data' && typeof v === 'string') ? `[Image: ${v.length} chars]` : v
+        ))
+    };
+}
+
+/**
+ * 最新API通信をコピー
+ */
+function copyLastApiCall() {
+    if (!App.debug.lastApiCall) { showToast('コピーする履歴がありません'); return; }
+    navigator.clipboard.writeText(`=== Memo AI Debug ===\n${JSON.stringify(App.debug.lastApiCall, null, 2)}`)
+        .then(() => showToast('コピーしました'))
+        .catch(() => showToast('コピー失敗'));
 }
 
 /**
@@ -490,22 +473,22 @@ async function initializeDebugMode() {
         }
         
         const data = await res.json();
-        serverDebugMode = data.debug_mode || false;
+        App.debug.serverMode = data.debug_mode || false;
         
         // デフォルトシステムプロンプトを更新
         if (data.default_system_prompt) {
-            DEFAULT_SYSTEM_PROMPT = data.default_system_prompt;
-            debugLog('[CONFIG] DEFAULT_SYSTEM_PROMPT loaded from backend');
+            App.defaultPrompt = data.default_system_prompt;
+            debugLog('[CONFIG] App.defaultPrompt loaded from backend');
         }
         
-        debugLog('[DEBUG_MODE] Server debug_mode:', serverDebugMode);
+        debugLog('[DEBUG_MODE] Server debug_mode:', App.debug.serverMode);
         
         // UI要素の表示制御
         updateDebugModeUI();
         
     } catch (err) {
         console.error('[DEBUG_MODE] Error fetching config:', err);
-        serverDebugMode = false;
+        App.debug.serverMode = false;
         updateDebugModeUI();
     }
 }
@@ -517,14 +500,14 @@ function updateDebugModeUI() {
     // モデル選択メニューの表示制御
     const modelSelectMenuItem = document.getElementById('modelSelectMenuItem');
     if (modelSelectMenuItem) {
-        if (serverDebugMode) {
+        if (App.debug.serverMode) {
             // DEBUG_MODE有効: モデル選択を表示
             modelSelectMenuItem.style.display = '';
         } else {
             // DEBUG_MODE無効: モデル選択を非表示
             modelSelectMenuItem.style.display = 'none';
             // 現在のモデル選択をクリア（自動選択に戻す）
-            currentModel = null;
+            App.model.current = null;
             localStorage.removeItem('memo_ai_selected_model');
         }
     }
@@ -532,14 +515,14 @@ function updateDebugModeUI() {
     // デバッグメニューの表示制御
     const debugInfoItem = document.getElementById('debugInfoMenuItem');
     if (debugInfoItem) {
-        if (serverDebugMode) {
+        if (App.debug.serverMode) {
             debugInfoItem.style.display = '';
         } else {
             debugInfoItem.style.display = 'none';
         }
     }
     
-    debugLog('[DEBUG_MODE] UI updated. Model selection:', serverDebugMode ? 'enabled' : 'disabled');
+    debugLog('[DEBUG_MODE] UI updated. Model selection:', App.debug.serverMode ? 'enabled' : 'disabled');
 }
 
 // ⚠️ ここまで削除（本番環境では）
@@ -804,7 +787,7 @@ function addChatMessage(type, message, properties = null, modelInfo = null) {
         modelInfo: modelInfo
     };
     
-    chatHistory.push(entry);
+    App.chat.history.push(entry);
     renderChatHistory();
     saveChatHistory();
 }
@@ -813,12 +796,25 @@ function renderChatHistory() {
     const container = document.getElementById('chatHistory');
     container.innerHTML = '';
     
-    chatHistory.forEach((entry, index) => {
+    console.log('[renderChatHistory] Rendering', App.chat.history.length, 'messages');
+    
+    App.chat.history.forEach((entry, index) => {
+        console.log(`[renderChatHistory] Message ${index}:`, {
+            type: entry.type,
+            messageLength: entry.message?.length,
+            messagePreview: entry.message?.substring(0, 50),
+            hasModelInfo: !!entry.modelInfo
+        });
+        
         const bubble = document.createElement('div');
         bubble.className = `chat-bubble ${entry.type}`;
         
         // メッセージ内容
-        bubble.innerHTML = entry.message.replace(/\n/g, '<br>');
+        const processedMessage = entry.message.replace(/\n/g, '<br>');
+        console.log(`[renderChatHistory] Processed message ${index}:`, processedMessage.substring(0, 100));
+        bubble.innerHTML = processedMessage;
+        
+        console.log(`[renderChatHistory] Bubble innerHTML ${index}:`, bubble.innerHTML.substring(0, 100));
         
         // ユーザーまたはAIメッセージにホバーボタンを追加
         if (entry.type === 'user' || entry.type === 'ai') {
@@ -857,13 +853,13 @@ function renderChatHistory() {
         }
         
         // AIのモデル情報表示
-        if (entry.type === 'ai' && showModelInfo && entry.modelInfo) {
+        if (entry.type === 'ai' && App.debug.showModelInfo && entry.modelInfo) {
             const infoDiv = document.createElement('div');
             infoDiv.className = 'model-info-text';
             const { model, usage, cost } = entry.modelInfo;
             
             // Try to find model info to get provider prefix
-            const modelInfo = availableModels.find(m => m.id === model);
+            const modelInfo = App.model.available.find(m => m.id === model);
             const modelDisplay = modelInfo 
                 ? `[${modelInfo.provider}] ${modelInfo.name}`
                 : model;
@@ -886,18 +882,18 @@ function renderChatHistory() {
 
 function saveChatHistory() {
     // 最新50件のみ保存
-    localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(chatHistory.slice(-50)));
+    localStorage.setItem(App.cache.KEYS.CHAT_HISTORY, JSON.stringify(App.chat.history.slice(-50)));
 }
 
 function loadChatHistory() {
-    const saved = localStorage.getItem(CHAT_HISTORY_KEY);
+    const saved = localStorage.getItem(App.cache.KEYS.CHAT_HISTORY);
     if (saved) {
         try {
-            chatHistory = JSON.parse(saved);
+            App.chat.history = JSON.parse(saved);
             renderChatHistory();
             
-            // Rebuild chatSession for API context
-            chatSession = chatHistory
+            // Rebuild App.chat.session for API context
+            App.chat.session = App.chat.history
                 .filter(entry => ['user', 'ai'].includes(entry.type))
                 .map(entry => {
                     let content = entry.message;
@@ -932,41 +928,30 @@ function applyRefinedText(text) {
     showToast("テキストを更新しました");
 }
 
-// --- セッション管理 ---
-
 // --- チャット・分析メインロジック (Core Logic) ---
 
 async function handleChatAI() {
-    console.log('[handleChatAI] Function called');
     const memoInput = document.getElementById('memoInput');
     const text = memoInput.value.trim();
     
-    console.log('[handleChatAI] Text:', text ? `"${text}"` : '(empty)');
-    console.log('[handleChatAI] Has image:', !!currentImageBase64);
-    console.log('[handleChatAI] Target ID:', currentTargetId);
-    
     // 入力チェック: テキストまたは画像が必須
-    if (!text && !currentImageBase64) {
-        console.log('[handleChatAI] Early return: no text and no image');
+    if (!text && !App.image.base64) {
         showToast("テキストまたは画像を入力してください");
         return;
     }
     
     // ターゲット未選択チェック
-    if (!currentTargetId) {
-        console.log('[handleChatAI] Early return: no target selected');
+    if (!App.target.id) {
         showToast("ターゲットを選択してください");
         return;
     }
-    
-    console.log('[handleChatAI] Validation passed, preparing message');
     updateState('📝', 'メッセージを準備中...', { step: 'preparing' });
     
     // 1. ユーザーメッセージの表示準備
     // テキストと画像（あれば）を組み合わせてチャットバブルに表示します。
     let displayMessage = text;
-    if (currentImageBase64) {
-        const imgTag = `<br><img src="data:${currentImageMimeType};base64,${currentImageBase64}" style="max-width:100px; border-radius:4px;">`;
+    if (App.image.base64) {
+        const imgTag = `<br><img src="data:${App.image.mimeType};base64,${App.image.base64}" style="max-width:100px; border-radius:4px;">`;
         displayMessage = (text ? text + "<br>" : "") + "[画像送信]" + imgTag;
     }
     
@@ -974,15 +959,12 @@ async function handleChatAI() {
     
     // 重要: 送信データを一時変数にコピーしてからステートをクリアする
     // これにより、非同期処理中にユーザーが次の操作を行っても影響を受けません。
-    const imageToSend = currentImageBase64;
-    const mimeToSend = currentImageMimeType;
-    
-    console.log('[handleChatAI] Image data copied:', imageToSend ? `${imageToSend.length} chars` : 'null');
+    const imageToSend = App.image.base64;
+    const mimeToSend = App.image.mimeType;
     
     // 2. 会話履歴の準備（現在のメッセージを追加する前に取得）
     // AIに送信する履歴には、現在のメッセージを含めず、直近10件のみを送信します。
-    const historyToSend = chatSession.slice(-10);
-    console.log('[handleChatAI] Sending conversation history:', historyToSend.length, 'messages');
+    const historyToSend = App.chat.session.slice(-10);
     
     // 3. AIへのコンテキスト用にメッセージを追加
     // 画像がある場合は、テキストと[画像送信]の両方を含めて履歴に記録します。
@@ -991,7 +973,7 @@ async function handleChatAI() {
         contextMessage = contextMessage ? `${contextMessage} [画像送信]` : '[画像送信]';
     }
     if (contextMessage) {
-        chatSession.push({role: 'user', content: contextMessage});
+        App.chat.session.push({role: 'user', content: contextMessage});
     }
     
     // 入力欄とプレビューのクリア
@@ -1002,13 +984,13 @@ async function handleChatAI() {
     // 4. 使用するAIモデルの決定
     // ユーザーが明示的に選択していない場合、画像ありならVisionモデル、なしならテキストモデルを自動選択します。
     const hasImage = !!imageToSend;
-    let modelToUse = currentModel;
+    let modelToUse = App.model.current;
     if (!modelToUse) {
-        modelToUse = hasImage ? defaultMultimodalModel : defaultTextModel;
+        modelToUse = hasImage ? App.model.defaultMultimodal : App.model.defaultText;
     }
     
     // UI表示用モデル名の取得
-    const modelInfo = availableModels.find(m => m.id === modelToUse);
+    const modelInfo = App.model.available.find(m => m.id === modelToUse);
     const modelDisplay = modelInfo 
         ? `[${modelInfo.provider}] ${modelInfo.name}`
         : (modelToUse || 'Auto');
@@ -1017,34 +999,33 @@ async function handleChatAI() {
     updateState('🔄', `AI分析中... (${modelDisplay})`, {
         model: modelToUse,
         hasImage: hasImage,
-        autoSelected: !currentModel,
+        autoSelected: !App.model.current,
         step: 'analyzing'
     });
     
     try {
-        const systemPrompt = currentSystemPrompt || DEFAULT_SYSTEM_PROMPT;
+        const systemPrompt = App.target.systemPrompt || App.defaultPrompt;
         
         // 「ページを参照」機能: オプションでターゲットの内容をコンテキストに含める
         const referenceToggle = document.getElementById('referencePageToggle');
         let referenceContext = '';
-        if (referenceToggle && referenceToggle.checked && currentTargetId) {
-            referenceContext = await fetchAndTruncatePageContent(currentTargetId, currentTargetType);
+        if (referenceToggle && referenceToggle.checked && App.target.id) {
+            referenceContext = await fetchAndTruncatePageContent(App.target.id, App.target.type);
         }
 
         // ペイロードの構築
         const payload = {
             text: text,
-            target_id: currentTargetId,
+            target_id: App.target.id,
             system_prompt: systemPrompt,
             session_history: historyToSend, // 現在のメッセージを含まない、直近10件の履歴
             reference_context: referenceContext,
             image_data: imageToSend,
             image_mime_type: mimeToSend,
-            model: currentModel // 自動選択の場合はnullを送る
+            model: App.model.current // 自動選択の場合はnullを送る
         };
         
         updateState('📡', 'サーバーに送信中...', { step: 'uploading' });
-        console.log('[handleChatAI] Sending request to /api/chat');
         console.log('[handleChatAI] Payload:', {
             ...payload,
             image_data: payload.image_data ? `(${payload.image_data.length} chars)` : null
@@ -1059,16 +1040,19 @@ async function handleChatAI() {
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(payload)
         });
-        
-        console.log('[handleChatAI] Response status:', res.status);
         updateState('📥', 'レスポンスを処理中...', { step: 'processing_response' });
         
         if (!res.ok) {
             const errorData = await res.json().catch(() => ({ detail: "解析中にエラーが発生しました" }));
+            // エラー時もAPI履歴に記録
+            recordApiCall('/api/chat', 'POST', payload, errorData, errorData.detail?.message || JSON.stringify(errorData), res.status);
             throw new Error(errorData.detail?.message || JSON.stringify(errorData));
         }
         
         const data = await res.json();
+        
+        // API通信履歴に記録（デバッグ用）
+        recordApiCall('/api/chat', 'POST', payload, data, null, res.status);
         
         // AI応答受信後、インジケーターを非表示
         hideAITypingIndicator();
@@ -1079,7 +1063,7 @@ async function handleChatAI() {
         }
         
         // ステート更新（完了）
-        const completedModelInfo = availableModels.find(m => m.id === data.model);
+        const completedModelInfo = App.model.available.find(m => m.id === data.model);
         const completedDisplay = completedModelInfo 
             ? `[${completedModelInfo.provider}] ${completedModelInfo.name}`
             : data.model;
@@ -1090,6 +1074,13 @@ async function handleChatAI() {
         });
         
         // 5. AIメッセージの表示
+        console.log('[handleChatAI] Checking data.message:', {
+            exists: !!data.message,
+            type: typeof data.message,
+            length: data.message?.length,
+            preview: data.message?.substring(0, 100)
+        });
+        
         if (data.message) {
             const modelInfo = {
                 model: data.model,
@@ -1097,7 +1088,31 @@ async function handleChatAI() {
                 cost: data.cost
             };
             addChatMessage('ai', data.message, null, modelInfo);
-            chatSession.push({role: 'assistant', content: data.message});
+            App.chat.session.push({role: 'assistant', content: data.message});
+        } else {
+            // メッセージが空の場合、ユーザーに理由を通知
+            console.warn('[handleChatAI] data.message is falsy, NOT adding to chat');
+            console.warn('[handleChatAI] Full response data:', data);
+            
+            // 診断情報を構築
+            const diagInfo = {
+                hasMessage: !!data.message,
+                messageType: typeof data.message,
+                messageValue: data.message,
+                hasProperties: !!data.properties,
+                hasRefinedText: !!data.refined_text,
+                model: data.model,
+                responseKeys: Object.keys(data)
+            };
+            console.warn('[handleChatAI] Diagnostic info:', diagInfo);
+            
+            // ユーザーに状況を通知
+            const warningMsg = `⚠️ AIからの応答メッセージが空でした（model: ${data.model || 'unknown'}）`;
+            addChatMessage('system', warningMsg);
+            updateState('⚠️', 'AIからの応答が空です', { 
+                diagnostic: diagInfo,
+                step: 'empty_response'
+            });
         }
         
         // 6. 抽出されたプロパティのフォーム反映
@@ -1113,15 +1128,13 @@ async function handleChatAI() {
         addChatMessage('system', "エラー: " + e.message);
         showToast("エラー: " + e.message);
     }
-    
-    console.log('[handleChatAI] Function completed');
 }
 
 function handleSessionClear() {
-    chatSession = [];
-    chatHistory = [];
+    App.chat.session = [];
+    App.chat.history = [];
     renderChatHistory();
-    localStorage.removeItem(CHAT_HISTORY_KEY);
+    localStorage.removeItem(App.cache.KEYS.CHAT_HISTORY);
     showToast("セッションをクリアしました");
 }
 
@@ -1136,9 +1149,9 @@ function showAITypingIndicator() {
         indicator.classList.remove('hidden');
         // チャット履歴の最下部にスクロール
         const chatHistory = document.getElementById('chatHistory');
-        if (chatHistory) {
+        if (App.chat.history) {
             setTimeout(() => {
-                chatHistory.scrollTop = chatHistory.scrollHeight;
+                App.chat.history.scrollTop = App.chat.history.scrollHeight;
             }, 50);
         }
     }
@@ -1157,14 +1170,14 @@ function hideAITypingIndicator() {
 // --- バブルからの追加機能 ---
 
 async function handleAddFromBubble(entry) {
-    if (!currentTargetId) {
+    if (!App.target.id) {
         showToast('ターゲットを選択してください');
         return;
     }
     
     const content = entry.message.replace(/<br>/g, '\n').replace(/整形案:\n/, '');
     
-    if (currentTargetType === 'database') {
+    if (App.target.type === 'database') {
         // データベースの場合は属性設定モーダルを表示
         // 簡易実装: 直接保存（将来的にはモーダルで属性設定可能に）
         await saveToDatabase(content);
@@ -1204,7 +1217,7 @@ async function saveToDatabase(content) {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
-                target_db_id: currentTargetId,
+                target_db_id: App.target.id,
                 target_type: 'database',
                 text: content,
                 properties: properties
@@ -1229,7 +1242,7 @@ async function saveToPage(content) {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
-                target_db_id: currentTargetId,
+                target_db_id: App.target.id,
                 target_type: 'page',
                 text: content,
                 properties: {}
@@ -1373,7 +1386,7 @@ function renderDynamicForm(container, schema) {
 
 function updateDynamicSelectOptions() {
     // プレビューデータ（過去の登録データ）がない場合は何もしない
-    if (!currentPreviewData || !currentPreviewData.rows) return;
+    if (!App.target.previewData || !App.target.previewData.rows) return;
     
     // 全てのselect/multi_select要素を取得
     const selects = document.querySelectorAll('#propertiesForm select');
@@ -1386,7 +1399,7 @@ function updateDynamicSelectOptions() {
         
         // プレビューデータから既存の値を抽出してSetに格納（重複排除）
         const existingValues = new Set();
-        currentPreviewData.rows.forEach(row => {
+        App.target.previewData.rows.forEach(row => {
             const value = row[propName];
             if (value && value.trim()) {
                 // multi_selectの場合、APIからはカンマ区切り文字列で返ってくることがあるため分割
@@ -1511,8 +1524,6 @@ function renderPageBlocks(blocks, container) {
 
 // --- ユーティリティ & キャッシュ & サーバー通信 ---
 
-// --- ユーティリティ & キャッシュ & サーバー通信 (Utils & Caching) ---
-
 // レスポンスをローカルストレージにキャッシュするラッパー関数
 // 頻繁なAPIコールを防ぎ、UXを改善するために使用します。
 async function fetchWithCache(url, key) {
@@ -1521,7 +1532,7 @@ async function fetchWithCache(url, key) {
         try {
             const entry = JSON.parse(cached);
             // 有効期限内であればキャッシュを返す
-            if (Date.now() - entry.timestamp < CACHE_TTL) {
+            if (Date.now() - entry.timestamp < App.cache.TTL) {
                 console.log(`[Cache Hit] ${key}`);
                 return entry.data;
             }
@@ -1557,7 +1568,7 @@ async function loadTargets(selector) {
     selector.innerHTML = '<option disabled selected>読み込み中...</option>';
     try {
         // ターゲットリスト取得（キャッシュ有効）
-        const data = await fetchWithCache('/api/targets', TARGETS_CACHE_KEY);
+        const data = await fetchWithCache('/api/targets', App.cache.KEYS.TARGETS);
         renderTargetOptions(selector, data.targets);
     } catch(e) {
         console.error(e);
@@ -1568,7 +1579,7 @@ async function loadTargets(selector) {
 
 function renderTargetOptions(selector, targets) {
     selector.innerHTML = '';
-    const lastSelected = localStorage.getItem(LAST_TARGET_KEY);
+    const lastSelected = localStorage.getItem(App.cache.KEYS.LAST_TARGET);
     
     // 新規作成オプションを追加
     // このオプションが選択された場合、モーダルを表示するロジックが発火します。
@@ -1602,16 +1613,16 @@ function renderTargetOptions(selector, targets) {
 // スキーマ情報の取得とUIの更新を行います。
 async function handleTargetChange(targetId) {
     if (!targetId) return;
-    currentTargetId = targetId;
-    localStorage.setItem(LAST_TARGET_KEY, targetId);
+    App.target.id = targetId;
+    localStorage.setItem(App.cache.KEYS.LAST_TARGET, targetId);
     
     const formContainer = document.getElementById('propertiesForm');
     formContainer.innerHTML = '<div class="spinner-small"></div> 読み込み中...';
     
     const selector = document.getElementById('appSelector');
     const selectedOption = selector.options[selector.selectedIndex];
-    currentTargetType = selectedOption ? selectedOption.dataset.type : 'database';
-    currentTargetName = selectedOption ? selectedOption.textContent : '';
+    App.target.type = selectedOption ? selectedOption.dataset.type : 'database';
+    App.target.name = selectedOption ? selectedOption.textContent : '';
     
     // システムプロンプト編集ボタンと内容ボタンを有効化
     const settingsBtn = document.getElementById('settingsBtn');
@@ -1621,16 +1632,16 @@ async function handleTargetChange(targetId) {
     
     try {
         // スキーマ取得（キャッシュ有効）
-        const data = await fetchWithCache(`/api/schema/${targetId}`, SCHEMA_CACHE_PREFIX + targetId);
-        currentSchema = data.schema;
+        const data = await fetchWithCache(`/api/schema/${targetId}`, App.cache.KEYS.SCHEMA_PREFIX + targetId);
+        App.target.schema = data.schema;
         
         // 動的フォームの生成
-        renderDynamicForm(formContainer, currentSchema);
+        renderDynamicForm(formContainer, App.target.schema);
         
         // ターゲットタイプに応じたUI制御
         const propsSection = document.getElementById('propertiesSection');
         const propsContainer = document.getElementById('propertiesContainer');
-        if (currentTargetType === 'database') {
+        if (App.target.type === 'database') {
             // データベースの場合は属性セクションを表示（デフォルトで閉じた状態）
             if (propsContainer) propsContainer.style.display = 'block';
             if (propsSection) propsSection.classList.add('hidden');
@@ -1643,12 +1654,12 @@ async function handleTargetChange(targetId) {
         // システムプロンプトの初期化
         try {
             // localStorageからカスタムプロンプトを取得
-            const promptKey = `${LOCAL_PROMPT_PREFIX}${targetId}`;
-            currentSystemPrompt = localStorage.getItem(promptKey) || null;
+            const promptKey = `${App.cache.KEYS.PROMPT_PREFIX}${targetId}`;
+            App.target.systemPrompt = localStorage.getItem(promptKey) || null;
             
         } catch (e) {
             console.error("Prompt load failed:", e);
-            currentSystemPrompt = null;
+            App.target.systemPrompt = null;
         }
 
     } catch(e) {
@@ -1680,7 +1691,7 @@ async function handleTargetChange(targetId) {
 }
 
 async function handleDirectSave() {
-    if (!currentTargetId) return showToast("ターゲットを選択してください");
+    if (!App.target.id) return showToast("ターゲットを選択してください");
     
     setLoading(true, "保存中...");
     
@@ -1712,8 +1723,8 @@ async function handleDirectSave() {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
-                target_db_id: currentTargetId,
-                target_type: currentTargetType,
+                target_db_id: App.target.id,
+                target_type: App.target.type,
                 text: text,
                 properties: properties
             })
@@ -1736,7 +1747,7 @@ async function handleDirectSave() {
         
         document.getElementById('memoInput').value = "";
         document.getElementById('memoInput').dispatchEvent(new Event('input'));
-        localStorage.removeItem(DRAFT_KEY);
+        localStorage.removeItem(App.cache.KEYS.DRAFT);
         
     } catch(e) {
         showToast("エラー: " + e.message);
@@ -1779,7 +1790,7 @@ function showToast(msg) {
 // --- SystemPrompt編集機能 (System Prompt Management) ---
 
 function openPromptModal() {
-    if (!currentTargetId) {
+    if (!App.target.id) {
         showToast('ターゲットを選択してください');
         return;
     }
@@ -1791,23 +1802,25 @@ function openPromptModal() {
     const resetBtn = document.getElementById('resetPromptBtn');
     
     // ターゲット名を表示
-    targetNameSpan.textContent = currentTargetName;
+    targetNameSpan.textContent = App.target.name;
     
     // カスタムプロンプトの有無を確認 (localStorage)
-    const promptKey = `${LOCAL_PROMPT_PREFIX}${currentTargetId}`;
+    const promptKey = `${App.cache.KEYS.PROMPT_PREFIX}${App.target.id}`;
     const savedPrompt = localStorage.getItem(promptKey);
     
-    // カスタム設定がある場合のみリセットボタンを表示
+    // リセットボタン: カスタム設定がある場合のみ有効化
     if (resetBtn) {
         if (savedPrompt) {
+            resetBtn.disabled = false;
             resetBtn.classList.remove('hidden');
         } else {
-            resetBtn.classList.add('hidden');
+            resetBtn.disabled = true;
+            resetBtn.classList.remove('hidden'); // 常に表示
         }
     }
     
     // 現在のプロンプトまたはデフォルトを表示
-    textarea.value = currentSystemPrompt || DEFAULT_SYSTEM_PROMPT;
+    textarea.value = App.target.systemPrompt || App.defaultPrompt;
     textarea.disabled = false;
     saveBtn.disabled = false;
     
@@ -1821,7 +1834,7 @@ function closePromptModal() {
 }
 
 async function saveSystemPrompt() {
-    if (!currentTargetId) return;
+    if (!App.target.id) return;
 
     const textarea = document.getElementById('promptTextarea');
     const saveBtn = document.getElementById('savePromptBtn');
@@ -1832,12 +1845,12 @@ async function saveSystemPrompt() {
     
     try {
         // デフォルトと異なる場合のみlocalStorageに保存
-        const promptKey = `${LOCAL_PROMPT_PREFIX}${currentTargetId}`;
+        const promptKey = `${App.cache.KEYS.PROMPT_PREFIX}${App.target.id}`;
         
-        if (newPrompt && newPrompt !== DEFAULT_SYSTEM_PROMPT) {
+        if (newPrompt && newPrompt !== App.defaultPrompt) {
             // カスタムプロンプトを保存
             localStorage.setItem(promptKey, newPrompt);
-            currentSystemPrompt = newPrompt;
+            App.target.systemPrompt = newPrompt;
             
             // リセットボタンを表示
             if (resetBtn) {
@@ -1846,7 +1859,7 @@ async function saveSystemPrompt() {
         } else {
             // デフォルトと同じならカスタム設定を削除
             localStorage.removeItem(promptKey);
-            currentSystemPrompt = null;
+            App.target.systemPrompt = null;
             
             // リセットボタンを隠す
             if (resetBtn) {
@@ -1855,6 +1868,7 @@ async function saveSystemPrompt() {
         }
         
         showToast('✅ システムプロンプトを保存しました');
+        closePromptModal(); // 保存後にモーダルを閉じる
     } catch (e) {
         console.error('Failed to save prompt:', e);
         showToast('❌ 保存に失敗しました');
@@ -1865,22 +1879,22 @@ async function saveSystemPrompt() {
 }
 
 function resetSystemPrompt() {
-    if (!currentTargetId) return;
+    if (!App.target.id) return;
     
-    const promptKey = `${LOCAL_PROMPT_PREFIX}${currentTargetId}`;
+    const promptKey = `${App.cache.KEYS.PROMPT_PREFIX}${App.target.id}`;
     localStorage.removeItem(promptKey); // 設定を削除
-    currentSystemPrompt = null;
+    App.target.systemPrompt = null;
     
     // テキストエリアをデフォルトに戻す
     const textarea = document.getElementById('promptTextarea');
     if (textarea) {
-        textarea.value = DEFAULT_SYSTEM_PROMPT;
+        textarea.value = App.defaultPrompt;
     }
     
-    // リセットボタンを隠す
+    // リセットボタンを無効化
     const resetBtn = document.getElementById('resetPromptBtn');
     if (resetBtn) {
-        resetBtn.classList.add('hidden');
+        resetBtn.disabled = true;
     }
     
     showToast('✅ デフォルトに戻しました');
@@ -1903,15 +1917,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (savePromptBtn) savePromptBtn.addEventListener('click', saveSystemPrompt);
     if (resetPromptBtn) resetPromptBtn.addEventListener('click', resetSystemPrompt);
 
-
-    // モーダル外クリックで閉じる
-    if (promptModal) {
-        promptModal.addEventListener('click', (e) => {
-            if (e.target.id === 'promptModal') {
-                closePromptModal();
-            }
-        });
-    }
+    // プロンプトモーダルは外側クリックで閉じない（編集内容保護）
 
     // ESCキーで閉じる
     document.addEventListener('keydown', (e) => {
@@ -1920,9 +1926,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const newPageModal = document.getElementById('newPageModal');
             const contentModal = document.getElementById('contentModal');
             
-            if (promptModal && !promptModal.classList.contains('hidden')) {
-                closePromptModal();
-            } else if (newPageModal && !newPageModal.classList.contains('hidden')) {
+            // プロンプトモーダルはEscで閉じない（編集内容保護）
+            if (newPageModal && !newPageModal.classList.contains('hidden')) {
                 closeNewPageModal();
             } else if (contentModal && !contentModal.classList.contains('hidden')) {
                 closeContentModal();
@@ -2009,7 +2014,7 @@ async function createNewPage() {
         
         // キャッシュをクリアしてターゲットリストをリロード
         // これにより、新しいページがドロップダウンリストにすぐに表示されます。
-        localStorage.removeItem(TARGETS_CACHE_KEY);
+        localStorage.removeItem(App.cache.KEYS.TARGETS);
         const appSelector = document.getElementById('appSelector');
         await loadTargets(appSelector);
         
@@ -2029,13 +2034,13 @@ async function createNewPage() {
 // --- ページ内容モーダル機能 (Content Viewer) ---
 
 function openContentModal() {
-    if (!currentTargetId) {
+    if (!App.target.id) {
         showToast('ターゲットを選択してください');
         return;
     }
     
     // 内蔵ビューワーではなく、ブラウザでNotionページを直接開く
-    const notionUrl = `https://www.notion.so/${currentTargetId.replace(/-/g, '')}`;
+    const notionUrl = `https://www.notion.so/${App.target.id.replace(/-/g, '')}`;
     window.open(notionUrl, '_blank');
     
     showToast('Notionページを開きました');
@@ -2096,11 +2101,11 @@ async function loadAvailableModels() {
         const data = await res.json();
         
         // モデルの分類とデフォルト設定
-        availableModels = data.all || [];
-        textOnlyModels = data.text_only || [];
-        visionModels = data.vision_capable || [];
-        defaultTextModel = data.defaults?.text;
-        defaultMultimodalModel = data.defaults?.multimodal;
+        App.model.available = data.all || [];
+        App.model.textOnly = data.text_only || [];
+        App.model.vision = data.vision_capable || [];
+        App.model.defaultText = data.defaults?.text;
+        App.model.defaultMultimodal = data.defaults?.multimodal;
         
         // デフォルトモデルの警告チェック
         if (data.warnings && data.warnings.length > 0) {
@@ -2112,20 +2117,20 @@ async function loadAvailableModels() {
         }
         
         // ユーザーの前回の選択を復元（なければ自動選択）
-        currentModel = localStorage.getItem('memo_ai_selected_model') || null;
+        App.model.current = localStorage.getItem('memo_ai_selected_model') || null;
         
         // 保存されていたモデルが現在も有効か確認
-        if (currentModel) {
-            const isValid = availableModels.some(m => m.id === currentModel);
+        if (App.model.current) {
+            const isValid = App.model.available.some(m => m.id === App.model.current);
             if (!isValid) {
-                console.warn(`Stored model '${currentModel}' is no longer available. Resetting to Auto.`);
-                currentModel = null;
+                console.warn(`Stored model '${App.model.current}' is no longer available. Resetting to Auto.`);
+                App.model.current = null;
                 localStorage.removeItem('memo_ai_selected_model');
                 showToast('保存されたモデルが無効なため、自動選択にリセットしました');
             }
         }
         
-        console.log("Models loaded:", availableModels.length);
+        console.log("Models loaded:", App.model.available.length);
     } catch (err) {
         console.error('Failed to load models:', err);
         showToast('モデルリストの読み込みに失敗しました');
@@ -2136,7 +2141,7 @@ function openModelModal() {
     const modal = document.getElementById('modelModal');
     
     // 一時変数に現在の設定をコピー（キャンセル機能のため）
-    tempSelectedModel = currentModel;
+    App.model.tempSelected = App.model.current;
     
     renderModelList();
     modal.classList.remove('hidden');
@@ -2147,15 +2152,15 @@ function renderModelList() {
     modelList.innerHTML = '';
     
     // デフォルトモデルの解決
-    const textModelInfo = availableModels.find(m => m.id === defaultTextModel);
-    const visionModelInfo = availableModels.find(m => m.id === defaultMultimodalModel);
+    const textModelInfo = App.model.available.find(m => m.id === App.model.defaultText);
+    const visionModelInfo = App.model.available.find(m => m.id === App.model.defaultMultimodal);
     
     const textDisplay = textModelInfo 
         ? `[${textModelInfo.provider}] ${textModelInfo.name}`
-        : (defaultTextModel || 'Unknown');
+        : (App.model.defaultText || 'Unknown');
     const visionDisplay = visionModelInfo 
         ? `[${visionModelInfo.provider}] ${visionModelInfo.name}`
-        : (defaultMultimodalModel || 'Unknown');
+        : (App.model.defaultMultimodal || 'Unknown');
     
     // デフォルトモデル利用不可の警告
     const textWarning = !textModelInfo ? ' ⚠️' : '';
@@ -2164,7 +2169,7 @@ function renderModelList() {
     // 自動選択オプション (推奨)
     const autoItem = document.createElement('div');
     autoItem.className = 'model-item';
-    if (tempSelectedModel === null) autoItem.classList.add('selected');
+    if (App.model.tempSelected === null) autoItem.classList.add('selected');
     autoItem.innerHTML = `
         <div class="model-info">
             <div class="model-name">✨ 自動選択 (推奨)</div>
@@ -2173,7 +2178,7 @@ function renderModelList() {
                 <div style="font-size: 0.9em;">🖼️ 画像: <span style="font-weight: 500;">${visionDisplay}${visionWarning}</span></div>
             </div>
         </div>
-        <span class="model-check">${tempSelectedModel === null ? '✓' : ''}</span>
+        <span class="model-check">${App.model.tempSelected === null ? '✓' : ''}</span>
     `;
     autoItem.onclick = () => selectTempModel(null);
     modelList.appendChild(autoItem);
@@ -2185,7 +2190,7 @@ function renderModelList() {
     modelList.appendChild(separator);
 
     // モデル一覧（逆順で表示）
-    availableModels.slice().reverse().forEach(model => {
+    App.model.available.slice().reverse().forEach(model => {
         modelList.appendChild(createModelItem(model));
     });
 }
@@ -2194,7 +2199,7 @@ function createModelItem(model) {
     const item = document.createElement('div');
     item.className = 'model-item';
     
-    const isSelected = model.id === tempSelectedModel;
+    const isSelected = model.id === App.model.tempSelected;
     if (isSelected) item.classList.add('selected');
     
     // Vision対応アイコン
@@ -2237,16 +2242,16 @@ function createModelItem(model) {
 }
 
 function selectTempModel(modelId) {
-    tempSelectedModel = modelId;
+    App.model.tempSelected = modelId;
     renderModelList();
 }
 
 function saveModelSelection() {
-    currentModel = tempSelectedModel;
+    App.model.current = App.model.tempSelected;
     
     // localStorageに保存
-    if (currentModel) {
-        localStorage.setItem('memo_ai_selected_model', currentModel);
+    if (App.model.current) {
+        localStorage.setItem('memo_ai_selected_model', App.model.current);
     } else {
         localStorage.removeItem('memo_ai_selected_model');
     }
@@ -2260,10 +2265,10 @@ function closeModelModal() {
 }
 
 function updateSessionCost(cost) {
-    sessionCost += cost;
+    App.model.sessionCost += cost;
     const display = document.getElementById('sessionCost');
     if (display) {
-        display.textContent = '$' + sessionCost.toFixed(5);
+        display.textContent = '$' + App.model.sessionCost.toFixed(5);
     }
 }
 

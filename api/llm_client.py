@@ -76,7 +76,7 @@ async def generate_json(
                 raise RuntimeError("Empty AI response")
             
             # 使用量とコストの計算
-            usage = response.usage.dict() if hasattr(response, 'usage') else {}
+            usage = response.usage.model_dump() if hasattr(response, 'usage') else {}
             cost = 0.0
             
             try:
