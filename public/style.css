@@ -1,5 +1,5 @@
 :root {
-    /* LINE風カラーパレット */
+    /* カラーパレット */
     --line-green: #06C755;
     --line-green-dark: #05b34c;
     --line-bg: #8cabd0;
@@ -252,7 +252,7 @@ body {
 .status-area {
     padding: 4px 15px;
     min-height: 24px;
-    display: flex;
+    display: none;
     align-items: center;
     gap: 8px;
     font-size: 12px;
@@ -1627,3 +1627,8 @@ select[multiple].prop-input:hover {
 }
 
 /* ⚠️ ここまで削除（本番環境では） */
+#appSelector option {
+    background-color: #353b48 !important;
+    color: var(--line-white) !important;
+    padding: 8px 12px;
+}

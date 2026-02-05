@@ -1864,14 +1864,24 @@ function renderTargetOptions(selector, targets) {
         return;
     }
 
+    let isSelected = false;
+
     targets.forEach(t => {
         const opt = document.createElement('option');
         opt.value = t.id;
         opt.textContent = `[${t.type === 'database' ? 'DB' : 'Page'}] ${t.title}`;
         opt.dataset.type = t.type;
-        if (t.id === lastSelected) opt.selected = true;
+        if (t.id === lastSelected) {
+            opt.selected = true;
+            isSelected = true;
+        }
         selector.appendChild(opt);
     });
+    
+    // 前回選択したものが存在しない、かつターゲットが存在する場合は先頭を選択
+    if (!isSelected && targets.length > 0) {
+        selector.value = targets[0].id;
+    }
     
     // 初期選択があれば反映してフォームをレンダリング
     if (selector.value && selector.value !== '__NEW_PAGE__') handleTargetChange(selector.value);
