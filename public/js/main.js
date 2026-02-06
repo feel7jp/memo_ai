@@ -1,3 +1,4 @@
+/// <reference path="./types.d.ts" />
 
 import { 
     openDebugModal, closeDebugModal, loadDebugInfo, 
@@ -153,9 +154,9 @@ function updateStatusArea() {
     const hasStatus = saveStatus && saveStatus.textContent.trim() !== '';
     
     if (isLoading || hasStatus) {
-        area.style.display = 'flex';
+        /** @type {HTMLElement} */(area).style.display = 'flex';
     } else {
-        area.style.display = 'none';
+        /** @type {HTMLElement} */(area).style.display = 'none';
     }
 }
 
@@ -202,6 +203,7 @@ function updateState(icon, message, details = null) {
     const stateDisplay = document.getElementById('stateDisplay');
     const stateIcon = document.getElementById('stateIcon');
     const stateText = document.getElementById('stateText');
+    const stateDetailsContent = document.getElementById('stateDetailsContent');
     
     // UI要素がない場合はログ出力のみ
     if (!stateDisplay || !stateIcon || !stateText) {
@@ -213,7 +215,21 @@ function updateState(icon, message, details = null) {
     stateText.textContent = message;
     stateDisplay.classList.remove('hidden');
     
+    // Update details content if provided
+    if (stateDetailsContent && details) {
+        stateDetailsContent.textContent = JSON.stringify(details, null, 2);
+    }
+    
     console.log(`[State] ${icon} ${message}`, details);
+    
+    // Auto-hide after 3 seconds if this is a completion state (✅ or ❌)
+    if (icon === '✅' || icon === '❌') {
+        setTimeout(() => {
+            if (stateDisplay) {
+                stateDisplay.classList.add('hidden');
+            }
+        }, 3000);
+    }
 }
 window.updateState = updateState;
 
@@ -274,8 +290,10 @@ async function loadTargets(forceRefresh = false) {
         renderTargetOptions(data.targets);
 
         // Enable header buttons after targets load
-        const settingsBtn = document.getElementById('settingsBtn');
-        const viewContentBtn = document.getElementById('viewContentBtn');
+        /** @type {HTMLButtonElement | null} */
+        const settingsBtn = /** @type {any} */(document.getElementById('settingsBtn'));
+        /** @type {HTMLButtonElement | null} */
+        const viewContentBtn = /** @type {any} */(document.getElementById('viewContentBtn'));
         if (settingsBtn) settingsBtn.disabled = false;
         if (viewContentBtn) viewContentBtn.disabled = false;
     } catch (err) {
@@ -292,7 +310,8 @@ function refreshTargetList() {
 window.refreshTargetList = refreshTargetList;
 
 function renderTargetOptions(targets) {
-    const selector = document.getElementById('appSelector');
+    /** @type {HTMLSelectElement | null} */
+    const selector = /** @type {any} */(document.getElementById('appSelector'));
     if (!selector) return;
     
     // 現在の選択値を保持
@@ -356,7 +375,9 @@ async function handleTargetChange(skipRefreshOrEvent = false) {
     // HTMLイベントから呼ばれた場合はEventオブジェクトが渡されるため、booleanかどうかをチェック
     const skipRefresh = skipRefreshOrEvent === true;
     
-    const selector = document.getElementById('appSelector');
+    /** @type {HTMLSelectElement | null} */
+    const selector = /** @type {any} */(document.getElementById('appSelector'));
+    if (!selector) return;
     const selectedOpt = selector.options[selector.selectedIndex];
     const targetId = selector.value;
     
@@ -377,13 +398,14 @@ async function handleTargetChange(skipRefreshOrEvent = false) {
     
     if (!targetId) {
         // Should not happen with new logic, but keep for safety
-        App.target = { id: null, type: null, schema: null };
+        App.target = { id: null, type: null, schema: null, systemPrompt: null };
         return;
     }
     
     const type = selectedOpt.dataset.type;
     App.target.id = targetId;
     App.target.type = type;
+    App.target.systemPrompt = null; // Initialize systemPrompt property
     
     // 選択を保存
     localStorage.setItem('memo_ai_last_target', targetId);
@@ -503,15 +525,15 @@ function renderDynamicForm(container, schema) {
         
         let input;
         
-        if (prop.type === 'select' || prop.type === 'multi_select') {
+        if (prop.type === 'select' || prop.type === 'multi_select' || prop.type === 'status') {
             input = document.createElement('select');
             input.className = 'prop-input';
             input.dataset.key = key;
             input.dataset.type = prop.type;
             
-            if (prop.type === 'multi_select') {
-                input.multiple = true;
-            }
+            // Note: multi_selectでもinput.multiple = trueを設定しない
+            // Notionでは複数選択可能だが、UIでは単一選択として扱う
+            // （優先度、工数レベルなどと同じ動作）
             
             // 空のオプション (デフォルト)
             const def = document.createElement('option');
@@ -520,7 +542,12 @@ function renderDynamicForm(container, schema) {
             input.appendChild(def);
             
             // Notionスキーマに定義されている固定オプションを追加
-            (prop[prop.type].options || []).forEach(o => {
+            // status タイプは prop.status.options、select/multi_select は prop[prop.type].options
+            const options = prop.type === 'status' 
+                ? (prop.status?.options || [])
+                : (prop[prop.type]?.options || []);
+            
+            options.forEach(o => {
                 const opt = document.createElement('option');
                 opt.value = o.name;
                 opt.textContent = o.name;
@@ -539,8 +566,26 @@ function renderDynamicForm(container, schema) {
             input.className = 'prop-input';
             input.dataset.key = key;
             input.dataset.type = prop.type;
+        } else if (prop.type === 'people' || prop.type === 'relation' || prop.type === 'files') {
+            // 現在未対応のプロパティタイプ
+            input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'prop-input';
+            input.disabled = true;
+            input.placeholder = '(このアプリからは編集できません)';
+            input.dataset.key = key;
+            input.dataset.type = prop.type;
+        } else if (prop.type === 'formula' || prop.type === 'rollup') {
+            // 自動計算/参照プロパティ
+            input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'prop-input';
+            input.disabled = true;
+            input.placeholder = '(自動計算/参照)';
+            input.dataset.key = key;
+            input.dataset.type = prop.type;
         } else {
-            // その他のテキスト系プロパティ (text, title, rich_text, number, url 等)
+            // その他のテキスト系プロパティ (text, title, rich_text, number, url, email, phone_number 等)
             input = document.createElement('input');
             input.type = 'text';
             input.className = 'prop-input';
@@ -554,7 +599,9 @@ function renderDynamicForm(container, schema) {
 }
 
 async function saveToDatabase() {
-    const memoInput = document.getElementById('memoInput');
+    /** @type {HTMLTextAreaElement | null} */
+    const memoInput = /** @type {any} */(document.getElementById('memoInput'));
+    if (!memoInput) return;
     const content = memoInput.value;
     
     if (!content && !App.image.base64) {
@@ -568,25 +615,31 @@ async function saveToDatabase() {
     const properties = {};
     const inputs = document.querySelectorAll('#propertiesForm .prop-input');
     
-    inputs.forEach(input => {
-        const key = input.dataset.key;
-        const type = input.dataset.type;
+    inputs.forEach(/** @param {HTMLElement} input */ input => {
+        const key = input.dataset?.key;
+        const type = input.dataset?.type;
         
-        if (type === 'select') {
-            if (input.value) properties[key] = { select: { name: input.value } };
+        if (type === 'select' || type === 'status') {
+            if (/** @type {HTMLSelectElement} */(input).value) {
+                const propType = type === 'status' ? 'status' : 'select';
+                properties[key] = { [propType]: { name: /** @type {HTMLSelectElement} */(input).value } };
+            }
         } else if (type === 'multi_select') {
-            const selected = Array.from(input.selectedOptions).map(o => ({ name: o.value }));
-            if (selected.length) properties[key] = { multi_select: selected };
+            // UIでは単一選択として扱うが、Notionには配列として送る
+            if (/** @type {HTMLSelectElement} */(input).value) {
+                properties[key] = { multi_select: [{ name: /** @type {HTMLSelectElement} */(input).value }] };
+            }
         } else if (type === 'checkbox') {
-            properties[key] = { checkbox: input.checked };
+            properties[key] = { checkbox: /** @type {HTMLInputElement} */(input).checked };
         } else if (type === 'date') {
-            if (input.value) properties[key] = { date: { start: input.value } };
-        } else if (input.value) {
+            if (/** @type {HTMLInputElement} */(input).value) properties[key] = { date: { start: /** @type {HTMLInputElement} */(input).value } };
+        } else if (/** @type {HTMLInputElement} */(input).value) {
             // text, url, email, etc.
-            if (type === 'url') properties[key] = { url: input.value };
-            else if (type === 'email') properties[key] = { email: input.value };
-            else if (type === 'number') properties[key] = { number: Number(input.value) };
-            else properties[key] = { rich_text: [{ text: { content: input.value } }] };
+            const val = /** @type {HTMLInputElement} */(input).value;
+            if (type === 'url') properties[key] = { url: val };
+            else if (type === 'email') properties[key] = { email: val };
+            else if (type === 'number') properties[key] = { number: Number(val) };
+            else properties[key] = { rich_text: [{ text: { content: val } }] };
         }
     });
 
@@ -617,10 +670,10 @@ async function saveToDatabase() {
         clearPreviewImage();
         
         // フォームリセット
-        inputs.forEach(input => {
-             if (input.type === 'checkbox') input.checked = false;
-             else if (input.tagName === 'SELECT') input.selectedIndex = -1;
-             else input.value = '';
+        inputs.forEach(/** @param {HTMLElement} input */ input => {
+             if (/** @type {HTMLInputElement} */(input).type === 'checkbox') /** @type {HTMLInputElement} */(input).checked = false;
+             else if (input.tagName === 'SELECT') /** @type {HTMLSelectElement} */(input).selectedIndex = -1;
+             else /** @type {HTMLInputElement} */(input).value = '';
         });
         
     } catch (e) {
@@ -634,7 +687,9 @@ async function saveToDatabase() {
 }
 
 async function saveToPage() {
-    const memoInput = document.getElementById('memoInput');
+    /** @type {HTMLTextAreaElement | null} */
+    const memoInput = /** @type {any} */(document.getElementById('memoInput'));
+    if (!memoInput) return;
     const content = memoInput.value;
     
     if (!content && !App.image.base64) {
@@ -718,17 +773,66 @@ window.openContentModal = openContentModal;
 
 // --- New Page Creation ---
 
+
 function openNewPageModal() {
-    // 新規作成モーダル（未実装ならプレースホルダー）
-    const appSelector = document.getElementById('appSelector');
+    // Show the custom new page modal
+    const modal = document.getElementById('newPageModal');
+    const input = /** @type {HTMLInputElement} */(document.getElementById('newPageNameInput'));
+    const createBtn = document.getElementById('createNewPageBtn');
+    const cancelBtn = document.getElementById('cancelNewPageBtn');
+    const closeBtn = document.getElementById('closeNewPageModalBtn');
     
-    const title = prompt("新しいページのタイトルを入力してください:");
-    if (title) {
-        createNewPage(title);
-    } else {
-        // キャンセル時は選択を戻す
-        appSelector.value = App.target.id || '';
-    }
+    if (!modal || !input || !createBtn || !cancelBtn || !closeBtn) return;
+    
+    // Clear previous input
+    input.value = '';
+    
+    // Show modal
+    modal.classList.remove('hidden');
+    input.focus();
+    
+    // Handle create button
+    const handleCreate = () => {
+        const title = input.value.trim();
+        if (title) {
+            modal.classList.add('hidden');
+            createNewPage(title);
+        } else {
+            showToast('ページ名を入力してください');
+        }
+    };
+    
+    // Handle cancel
+    const handleCancel = () => {
+        modal.classList.add('hidden');
+        // Reset app selector to previous value
+        const appSelector = /** @type {HTMLSelectElement} */(document.getElementById('appSelector'));
+        if (appSelector) appSelector.value = App.target.id || '';
+    };
+    
+    // Handle keyboard events
+    const onKeydown = (/** @type {KeyboardEvent} */ e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            handleCreate();
+        } else if (e.key === 'Escape') {
+            handleCancel();
+        }
+    };
+    
+    // Add event listeners with {once: true} to auto-cleanup
+    createBtn.addEventListener('click', handleCreate, {once: true});
+    cancelBtn.addEventListener('click', handleCancel, {once: true});
+    closeBtn.addEventListener('click', handleCancel, {once: true});
+    input.addEventListener('keydown', onKeydown);
+    
+    // Remove keydown listener when modal closes
+    const removeKeyListener = () => {
+        input.removeEventListener('keydown', onKeydown);
+    };
+    createBtn.addEventListener('click', removeKeyListener, {once: true});
+    cancelBtn.addEventListener('click', removeKeyListener, {once: true});
+    closeBtn.addEventListener('click', removeKeyListener, {once: true});
 }
 window.openNewPageModal = openNewPageModal;
 
@@ -751,9 +855,12 @@ async function createNewPage(title) {
         await loadTargets();
         
         // 作成したページを選択
-        const selector = document.getElementById('appSelector');
-        selector.value = data.id;
-        handleTargetChange();
+        /** @type {HTMLSelectElement | null} */
+        const selector = /** @type {any} */(document.getElementById('appSelector'));
+        if (selector) {
+            selector.value = data.id;
+            handleTargetChange();
+        }
         
     } catch(e) {
         showToast(`作成失敗: ${e.message}`);
@@ -769,8 +876,8 @@ function handleSuperReload() {
         // ローカルストレージを全クリア
         localStorage.clear();
         
-        // キャッシュバスター付きでリロード
-        window.location.reload(true);
+        // キャッシュをクリアしてリロード (reload(true) is deprecated)
+        window.location.reload();
     }
 }
 window.handleSuperReload = handleSuperReload;
@@ -794,13 +901,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         // Close on outside click
         document.addEventListener('click', (e) => {
-            if (!emojiBtn.contains(e.target) && !emojiPalette.contains(e.target)) {
+            if (e.target instanceof Node && !emojiBtn.contains(e.target) && !emojiPalette.contains(e.target)) {
                 emojiPalette.classList.add('hidden');
             }
         });
         
         // Stamp selection
-        document.querySelectorAll('.emoji-item').forEach(item => {
+        document.querySelectorAll('.emoji-btn').forEach(item => {
             item.addEventListener('click', () => {
                 const emoji = item.textContent;
                 sendStamp(emoji);
@@ -811,7 +918,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // Memo Input
     const memoInput = document.getElementById('memoInput');
-    const sendBtn = document.getElementById('sendBtn'); // チャット送信ボタンがあれば
     
     if (memoInput) {
         // Auto-resize
@@ -832,7 +938,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 // ここでは便宜上、Ctrl+Enterまたは明示的なボタンでNotion保存
                 // EnterのみはチャットAI送信とする（仕様確認要だが既存踏襲）
                 
-                const text = memoInput.value.trim();
+                const text = /** @type {HTMLTextAreaElement} */(memoInput).value.trim();
                 if (text || App.image.base64) {
                     handleChatAI(text);
                 }
@@ -849,7 +955,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Close settings on outside click
     document.addEventListener('click', (e) => {
         const menu = document.getElementById('settingsMenu');
-        if (settingsBtn && menu && !settingsBtn.contains(e.target) && !menu.contains(e.target)) {
+        if (e.target instanceof Node && settingsBtn && menu && !settingsBtn.contains(e.target) && !menu.contains(e.target)) {
             menu.classList.add('hidden');
         }
     });
@@ -859,7 +965,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     loadChatHistory();  // Load chat history
     
     // AI Info Display Toggle
-    const showInfoToggle = document.getElementById('showModelInfoToggle');
+    /** @type {HTMLInputElement | null} */
+    const showInfoToggle = /** @type {any} */(document.getElementById('showModelInfoToggle'));
     if (showInfoToggle) {
         // Restore state
         const savedShowInfo = localStorage.getItem(App.cache.KEYS.SHOW_MODEL_INFO);
@@ -870,8 +977,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         // Add listener
         showInfoToggle.addEventListener('change', (e) => {
-            App.debug.showModelInfo = e.target.checked;
-            localStorage.setItem(App.cache.KEYS.SHOW_MODEL_INFO, App.debug.showModelInfo);
+            App.debug.showModelInfo = /** @type {HTMLInputElement} */(e.target).checked;
+            localStorage.setItem(App.cache.KEYS.SHOW_MODEL_INFO, String(App.debug.showModelInfo));
             renderChatHistory(); // Re-render to show/hide info immediately
         });
     }
@@ -911,27 +1018,27 @@ function fillForm(properties) {
     // Original implementation looked for inputs directly
     const inputs = document.querySelectorAll('#propertiesForm .prop-input');
     
-    inputs.forEach(input => {
-        const key = input.dataset.key;
-        const type = input.dataset.type;
+    inputs.forEach(/** @param {HTMLElement} input */ input => {
+        const key = input.dataset?.key;
+        const type = input.dataset?.type;
         const value = properties[key];
 
         if (!value) return;
         if (type === 'select' && value?.select?.name) {
-            input.value = value.select.name;
+            /** @type {HTMLSelectElement} */(input).value = value.select.name;
         } else if (type === 'multi_select' && value?.multi_select) {
             const names = value.multi_select.map(item => item.name);
-            Array.from(input.options).forEach(opt => {
+            Array.from(/** @type {HTMLSelectElement} */(input).options).forEach(opt => {
                 opt.selected = names.includes(opt.value);
             });
         } else if (type === 'checkbox' && value?.checkbox !== undefined) {
-            input.checked = value.checkbox;
+            /** @type {HTMLInputElement} */(input).checked = value.checkbox;
         } else if (type === 'date' && value?.date?.start) {
-            input.value = value.date.start;
+            /** @type {HTMLInputElement} */(input).value = value.date.start;
         } else if (value?.rich_text?.[0]?.text?.content) {
-            input.value = value.rich_text[0].text.content;
+            /** @type {HTMLInputElement} */(input).value = value.rich_text[0].text.content;
         } else if (typeof value === 'string') {
-            input.value = value;
+            /** @type {HTMLInputElement} */(input).value = value;
         }
     });
 }
@@ -1043,8 +1150,21 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     // Target selector change handler
-    const appSelector = document.getElementById('appSelector');
+    /** @type {HTMLSelectElement | null} */
+    const appSelector = /** @type {any} */(document.getElementById('appSelector'));
     if (appSelector) {
-        appSelector.addEventListener('change', handleTargetChange);
+        // Wrap handleTargetChange to match event listener signature
+        appSelector.addEventListener('change', () => handleTargetChange(false));
+    }
+    
+    // State display toggle button
+    const stateToggle = document.getElementById('stateToggle');
+    const stateDetails = document.getElementById('stateDetails');
+    if (stateToggle && stateDetails) {
+        stateToggle.addEventListener('click', (e) => {
+            e.stopPropagation();
+            stateDetails.classList.toggle('hidden');
+            stateToggle.textContent = stateDetails.classList.contains('hidden') ? '▼' : '▲';
+        });
     }
 });

@@ -1,0 +1,39 @@
+[project]
+name = "memo-ai"
+version = "1.0.0"
+description = "Notion AI Memo - A web-based chat interface for Notion integration"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi==0.121.0",
+    "uvicorn==0.38.0",
+    "notion-client==2.7.0",
+    "litellm>=1.56.0,<2.0.0",
+    "python-dotenv==1.0.1",
+    "httpx==0.27.2",
+    "tzdata>=2024.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+]
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "-ra -v --tb=short"
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+
+# Windows環境でのUTF-8出力対応
+[tool.pytest.ini_options.env]
+PYTHONIOENCODING = "utf-8"
+
+# デグレッション検知用マーカー
+markers = [
+    "smoke: 最重要テスト（健全性チェック、CI高速実行用）",
+    "regression: リグレッション検知テスト（全機能カバレッジ）",
+    "integration: 統合テスト（複数エンドポイント連携）",
+    "security: セキュリティ関連テスト",
+]

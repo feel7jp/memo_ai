@@ -8,3 +8,29 @@ env/
 venv/
 .idea/
 .vscode/
+.pytest_cache/
+.ruff_cache/
+
+# Python compiled
+*.py[cod]
+*$py.class
+*.so
+
+# Logs
+*.log
+
+# OS specific
+Thumbs.db
+
+# Coverage
+htmlcov/
+.coverage
+.coverage.*
+
+# IDE
+*.swp
+*.swo
+
+# Project specific backup files
+*.bak
+models_api_response.json

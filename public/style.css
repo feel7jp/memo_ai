@@ -20,6 +20,8 @@
 html {
     height: 100%;
     overflow: hidden;
+    overflow-x: hidden;
+    /* 横スクロールバー非表示 */
 }
 
 body {
@@ -28,6 +30,8 @@ body {
     color: var(--line-text);
     height: 100%;
     overflow: hidden;
+    overflow-x: hidden;
+    /* 横スクロールバー非表示 */
 }
 
 .app-container {
@@ -83,10 +87,30 @@ body {
 .chat-history {
     flex: 1;
     overflow-y: auto;
+    overflow-x: hidden;
+    /* 横スクロールバー非表示 */
     padding: 15px;
     display: flex;
     flex-direction: column;
     gap: 12px;
+}
+
+/* スクロールバーのスタイリング - 使用時のみ表示 */
+.chat-history::-webkit-scrollbar {
+    width: 6px;
+}
+
+.chat-history::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.chat-history::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 3px;
+}
+
+.chat-history::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.3);
 }
 
 /* チャットバブル */
@@ -321,8 +345,28 @@ body {
 .properties-section:not(.hidden) {
     max-height: 400px;
     overflow-y: auto;
+    overflow-x: hidden;
+    /* 横スクロールバー非表示 */
     padding: 15px;
     border-bottom: 1px solid #eee;
+}
+
+/* 属性セクションのスクロールバー - 使用時のみ表示 */
+.properties-section::-webkit-scrollbar {
+    width: 6px;
+}
+
+.properties-section::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.properties-section::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 3px;
+}
+
+.properties-section::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.3);
 }
 
 .prop-field {
@@ -344,32 +388,6 @@ body {
     border: 1px solid #ddd;
     font-size: 14px;
     background: white;
-}
-
-/* Multi-select collapsed behavior */
-select[multiple].prop-input {
-    height: 38px;
-    overflow: hidden;
-    padding-right: 20px;
-    background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23333%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E");
-    background-repeat: no-repeat;
-    background-position: right .7em top 50%;
-    background-size: .65em auto;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-}
-
-select[multiple].prop-input::-webkit-scrollbar {
-    display: none;
-}
-
-select[multiple].prop-input:focus,
-select[multiple].prop-input:hover {
-    height: auto;
-    max-height: 150px;
-    overflow-y: auto;
-    position: relative;
-    z-index: 10;
 }
 
 /* ===== INPUT AREA - LINE STYLE ===== */
@@ -613,6 +631,26 @@ select[multiple].prop-input:hover {
     gap: 8px;
     max-height: 280px;
     overflow-y: auto;
+    overflow-x: hidden;
+    /* 横スクロールバー非表示 */
+}
+
+/* 絵文字グリッドのスクロールバー - 使用時のみ表示 */
+.emoji-grid::-webkit-scrollbar {
+    width: 6px;
+}
+
+.emoji-grid::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.emoji-grid::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 3px;
+}
+
+.emoji-grid::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.3);
 }
 
 .emoji-btn {
@@ -693,6 +731,26 @@ select[multiple].prop-input:hover {
 /* Notion-style Table */
 .notion-table-wrapper {
     overflow-x: auto;
+    overflow-y: hidden;
+    /* 縦スクロールバー非表示 */
+}
+
+/* Notionテーブルラッパーのスクロールバー - 使用時のみ表示 */
+.notion-table-wrapper::-webkit-scrollbar {
+    height: 6px;
+}
+
+.notion-table-wrapper::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.notion-table-wrapper::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 3px;
+}
+
+.notion-table-wrapper::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.3);
 }
 
 .notion-table {

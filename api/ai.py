@@ -410,7 +410,7 @@ Restraints:
     # 現在のユーザー入力を追加
     if has_image:
         #マルチモーダル: 画像データを含むコンテンツパーツを作成
-        print(f"[Chat AI] Preparing multimodal message with image")
+        print("[Chat AI] Preparing multimodal message with image")
         current_user_content = prepare_multimodal_prompt(
             text or "(No text provided)",
             image_data,
@@ -461,12 +461,12 @@ Restraints:
         
         # 文字列が返ってきた場合の対応（LLMがJSON形式を返さなかった場合）
         if isinstance(data, str):
-            print(f"[Chat AI] Response is a string, wrapping in message dict")
+            print("[Chat AI] Response is a string, wrapping in message dict")
             data = {"message": data}
         
         # リスト形式で返ってきた場合の対応（一部のモデルの挙動）
         elif isinstance(data, list):
-            print(f"[Chat AI] Response is a list, extracting first element")
+            print("[Chat AI] Response is a list, extracting first element")
             if data and isinstance(data[0], dict):
                 data = data[0]
             else:
@@ -495,7 +495,7 @@ Restraints:
     
     # フロントエンド向けのメッセージフィールド保証
     if "message" not in data or not data["message"]:
-        print(f"[Chat AI] Message missing or empty, generating fallback")
+        print("[Chat AI] Message missing or empty, generating fallback")
         
         # プロパティが直接返された場合のフォールバックメッセージ生成
         has_properties = any(key in data for key in ["Title", "Content", "properties"])
