@@ -355,7 +355,7 @@ pytest -v --tb=short
 
 #### 4. ドキュメント更新
 - `README.md`: 変更があれば更新
-- `AGENTS.md`: 新しい問題パターンや予防策を追加。700行を超えたら、重要度の低い項目を要点のみ端的に要約して減らす。
+- `AGENTS.md`: 新しい問題パターンや予防策を追加。AGENTS.mdが500行を超えたら、重要度の低い項目を要点のみ端的に要約して減らす。
 - `task.md`: 完了項目をチェック
 - 完了レポート（walkthrough）: 変更内容を記録
 
@@ -376,6 +376,16 @@ git diff
 **予防策**:
 -   CSS 変更時は **デスクトップ** と **モバイル** の両方で確認
 -   削除前にブラウザ開発者ツールで影響範囲を確認
+
+### 問題5: Vercel ビルドエラー（pyproject.toml）
+
+**症状**: Vercel デプロイ時に `No [project] table found` エラー
+
+**原因**: ローカルは `pip` + `requirements.txt`、Vercel は `uv` + `pyproject.toml` を使用。`uv` は `[project]` テーブルを必須とする。
+
+**予防策**:
+-   `pyproject.toml` に `[project]` テーブルを常に含める
+-   依存関係を `pyproject.toml` と `requirements.txt` の両方に同期
 
 ---
 
