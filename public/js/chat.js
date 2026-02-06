@@ -317,14 +317,12 @@ export async function handleAddFromBubble(entry) {
             const properties = {};
             const inputs = document.querySelectorAll('#propertiesForm .prop-input');
             
+            // Collect properties from form inputs
             inputs.forEach(input => {
                 const key = input.dataset.key;
                 const type = input.dataset.type;
                 
-                if (type === 'title') {
-                    // Use bubble content for title (truncated to 100 chars)
-                    properties[key] = { title: [{ text: { content: content.substring(0, 100) } }] };
-                } else if (type === 'rich_text') {
+                if (type === 'rich_text') {
                     // Use form value if exists, otherwise bubble content
                     properties[key] = { rich_text: [{ text: { content: input.value || content } }] };
                 } else if (type === 'select') {
@@ -338,6 +336,19 @@ export async function handleAddFromBubble(entry) {
                     properties[key] = { checkbox: input.checked };
                 }
             });
+            
+            // IMPORTANT: Always set the title property from schema
+            // Title properties are not shown in the form (skipped in renderDynamicForm),
+            // so we need to find and populate them from the schema
+            if (window.App.target.schema) {
+                for (const [key, prop] of Object.entries(window.App.target.schema)) {
+                    if (prop.type === 'title') {
+                        // Use bubble content for title (truncated to 100 chars to fit Notion limits)
+                        properties[key] = { title: [{ text: { content: content.substring(0, 100) } }] };
+                        break; // Only one title property per database
+                    }
+                }
+            }
             
             
             const payload = {

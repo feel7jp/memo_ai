@@ -20,7 +20,7 @@
                     <select id="appSelector">
                         <option disabled selected>読み込み中...</option>
                     </select>
-                    <button id="viewContentBtn" class="header-btn" title="ページ内容を表示" disabled>📄 内容</button>
+                    <button id="viewContentBtn" class="header-btn" title="内容を確認" disabled>📄 内容</button>
                     <button id="settingsBtn" class="header-btn" title="設定" disabled>⚙️ 設定</button>
                 </div>
             </div>
@@ -309,20 +309,6 @@
                 </div>
             </div>
 
-            <!-- ページ内容全画面モーダル -->
-            <div id="contentModal" class="modal hidden">
-                <div class="modal-content modal-fullscreen">
-                    <div class="modal-header">
-                        <h2 id="contentModalTitle">📄 ページ内容</h2>
-                        <button id="closeContentModalBtn" class="close-btn">×</button>
-                    </div>
-                    <div class="modal-body">
-                        <div id="contentModalPreview" class="content-preview-box">
-                            <p class="placeholder-text">ターゲットを選択すると内容が表示されます</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
         </div>
         <script type="module" src="js/main.js"></script>
 </body>

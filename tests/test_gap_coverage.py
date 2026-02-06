@@ -109,52 +109,6 @@ async def test_save_database_with_image_in_richtext(client):
         assert "image" in content
 
 
-# ===== 3. GET /api/content/database - Nullプロパティ =====
-
-
-@pytest.mark.asyncio
-async def test_database_content_null_properties(client):
-    """
-    データベースコンテンツ取得時、Nullや空配列のプロパティが適切に空文字列に変換されること
-    """
-
-    # Nullや空配列を含むモックデータ
-    mock_results = [
-        {
-            "properties": {
-                "Title": {"type": "title", "title": [{"plain_text": "Task"}]},
-                "Select": {"type": "select", "select": None},  # Null
-                "MultiSelect": {
-                    "type": "multi_select",
-                    "multi_select": [],
-                },  # 空配列
-                "People": {"type": "people", "people": []},  # 空配列
-                "Date": {"type": "date", "date": None},  # Null
-            }
-        }
-    ]
-
-    with patch("api.endpoints.query_database", new_callable=AsyncMock) as mock_query:
-        mock_query.return_value = mock_results
-
-        response = await client.get("/api/content/test-db?type=database")
-        assert response.status_code == 200
-
-        data = response.json()
-        assert data["type"] == "database"
-
-        # 1件のデータがあること
-        assert len(data["rows"]) == 1
-        row = data["rows"][0]
-
-        # Null/空配列が空文字列に変換されていること
-        assert row["Title"] == "Task"
-        assert row["Select"] == ""
-        assert row["MultiSelect"] == ""
-        assert row["People"] == ""
-        assert row["Date"] == ""
-
-
 # ===== 4. GET /api/targets - 環境変数未設定エラー =====
 
 

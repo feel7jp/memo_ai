@@ -213,19 +213,6 @@ async def test_create_page_validation(client):
 
 
 @pytest.mark.asyncio
-async def test_content_endpoint_routing(client):
-    """
-    コンテンツエンドポイントの振り分け確認
-    """
-    with patch("api.endpoints.get_database_content") as mock_db:
-        mock_db.return_value = {"type": "database", "columns": [], "rows": []}
-
-        response = await client.get("/api/content/test-id?type=database")
-        assert response.status_code == 200
-        assert mock_db.called
-
-
-@pytest.mark.asyncio
 async def test_save_long_text_splitting(client):
     """
     保存時に長文テキスト(2000文字超)が分割されるロジックを検証

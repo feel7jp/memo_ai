@@ -52,10 +52,21 @@ NOTION_ROOT_PAGE_ID=your_page_id_here
 以下のコマンドでサーバーを立ち上げます。
 
 ```bash
-python -m uvicorn api.index:app --reload
+# PC内でのみ利用する場合
+python -m uvicorn api.index:app --reload --host 0.0.0.0
+#  --host 0.0.0.0　スマホやタブレットからもアクセスしたい場合のオプション
 ```
 
 ブラウザで `http://localhost:8000` にアクセスすれば完了です！
+
+#### スマホ・タブレットからのアクセス方法
+
+`--host 0.0.0.0` で起動した場合、同じWi-Fiネットワーク上のデバイスからアクセスできます。
+
+1. サーバー起動時に表示されるIPアドレスを確認（例: `http://192.168.x.x:8000`）
+2. スマホ・タブレットのブラウザでそのURLにアクセス
+
+⚠️ **注意**: `--host 0.0.0.0` は同じネットワーク上の全デバイスからアクセス可能になります。公共のWi-Fiでは使用しないでください。
 
 ---
 
@@ -65,7 +76,7 @@ python -m uvicorn api.index:app --reload
 AIに改造アイデアを提案させることも可能。
 
 ### AIの性格を変える
-`public/script.js` の `DEFAULT_SYSTEM_PROMPT` を編集します。
+`public/js/prompt.js` の `DEFAULT_SYSTEM_PROMPT` を編集します。
 ```javascript
 // 例: 関西弁のAIにする
 const DEFAULT_SYSTEM_PROMPT = `あなたは大阪出身の陽気なアシスタントです。`;
@@ -113,4 +124,45 @@ APIキーは大切な「鍵」です。他人に知られないように管理�
     *   `Network` タブ: APIリクエスト (`/api/chat` など) が `200 OK` 以外（404や500）になっていませんか？
 2.  **サーバーログ**:
     *   ターミナルを確認してください。Pythonのエラー詳細（Traceback）が表示されているはずです。
+
+### 🔒 5. セキュリティガイドライン
+
+#### APIキーの管理
+API キーは `.gitignore` で保護されているため、Git にコミットされません。しかし、以下の点に注意してください：
+
+-   スクリーンショットやログにAPIキーが含まれていないか確認
+-   `.env` ファイルを誤って公開リポジトリにプッシュしない
+-   もし漏洩した場合は、直ちにAPIキーを無効化して再発行
+
+#### CORS設定（本番環境）
+
+本番デプロイ時は **必ず** `ALLOWED_ORIGINS` 環境変数を設定してください：
+
+```bash
+# 例: Vercel環境変数設定
+ALLOWED_ORIGINS=https://yourdomain.com,https://www.yourdomain.com
+```
+
+⚠️ **未設定の場合のリスク**:
+- 開発環境では全オリジン許可 (`*`) となり、本番環境でも予期しないアクセスを受ける可能性があります
+- CSRF攻撃のリスクが高まります
+
+#### DEBUG_MODE
+
+`.env` ファイルの `DEBUG_MODE` は本番環境では **必ず** `False` に設定してください：
+
+```env
+# 本番環境
+DEBUG_MODE=False
+
+# 開発環境のみ
+# DEBUG_MODE=True
+```
+
+`DEBUG_MODE=True` の場合、以下の機能が有効化されます：
+- デバッグエンドポイント `/api/debug5075378` の公開
+- 詳細なエラースタックトレースの出力
+- モデル選択機能の有効化
+
+---
 

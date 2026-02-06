@@ -16,6 +16,8 @@ from api.config import (
     DEFAULT_SYSTEM_PROMPT,
     DEFAULT_TEXT_MODEL,
     DEFAULT_MULTIMODAL_MODEL,
+    NOTION_BLOCK_CHAR_LIMIT,
+    NOTION_CONTENT_MAX_LENGTH,
 )
 from api.notion import (
     fetch_config_db,
@@ -23,7 +25,6 @@ from api.notion import (
     get_db_schema,
     get_page_info,
     safe_api_call,
-    query_database,
     fetch_recent_pages,
 )
 from api.models import get_available_models, get_text_models, get_vision_models
@@ -247,116 +248,6 @@ async def get_schema(target_id: str, request: Request):
             "page_error": page_error or "Unknown",
         },
     )
-
-
-@router.get("/api/content/{target_id}")
-async def get_content(target_id: str, type: str = "page"):
-    """
-    コンテンツ取得の統合エンドポイント
-    """
-    if type == "database":
-        return await get_database_content(target_id)
-    else:
-        return await get_page_content(target_id)
-
-
-@router.get("/api/content/page/{page_id}")
-async def get_page_content(page_id: str):
-    """
-    ページ内容の取得
-    """
-    try:
-        results = await fetch_children_list(page_id)
-        blocks = []
-
-        for block in results:
-            b_type = block.get("type")
-            content = ""
-
-            if b_type in block:
-                info = block[b_type]
-                if "rich_text" in info:
-                    content = "".join(
-                        [t.get("plain_text", "") for t in info["rich_text"]]
-                    )
-                elif b_type == "child_page":
-                    content = info.get("title", "")
-                elif b_type == "child_database":
-                    content = info.get("title", "")
-
-            blocks.append({"type": b_type, "content": content})
-
-        return {"type": "page", "blocks": blocks}
-    except Exception as e:
-        print(f"[Page Content Error] {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Failed to fetch page content: {str(e)}"
-        )
-
-
-@router.get("/api/content/database/{database_id}")
-async def get_database_content(database_id: str):
-    """
-    データベース内容の取得
-    """
-    try:
-        results = await query_database(database_id, limit=15)
-        if not results:
-            return {"type": "database", "columns": [], "rows": []}
-
-        columns = list(results[0]["properties"].keys())
-        rows = []
-
-        for page in results:
-            row_data = {}
-            for col in columns:
-                prop = page["properties"].get(col)
-                if not prop:
-                    row_data[col] = ""
-                    continue
-
-                p_type = prop["type"]
-                if p_type == "title":
-                    row_data[col] = "".join(
-                        [t.get("plain_text", "") for t in prop["title"]]
-                    )
-                elif p_type == "rich_text":
-                    row_data[col] = "".join(
-                        [t.get("plain_text", "") for t in prop["rich_text"]]
-                    )
-                elif p_type == "select":
-                    row_data[col] = prop["select"]["name"] if prop["select"] else ""
-                elif p_type == "multi_select":
-                    row_data[col] = ", ".join([o["name"] for o in prop["multi_select"]])
-                elif p_type == "date":
-                    row_data[col] = prop["date"]["start"] if prop["date"] else ""
-                elif p_type == "url":
-                    row_data[col] = prop["url"] or ""
-                elif p_type == "checkbox":
-                    row_data[col] = "✅" if prop["checkbox"] else "⬜"
-                elif p_type == "number":
-                    row_data[col] = (
-                        str(prop["number"]) if prop["number"] is not None else ""
-                    )
-                elif p_type == "people":
-                    row_data[col] = ", ".join(
-                        [u.get("name", "Unknown") for u in prop["people"]]
-                    )
-                elif p_type == "status":
-                    row_data[col] = (
-                        prop["status"].get("name", "") if prop["status"] else ""
-                    )
-                else:
-                    row_data[col] = f"({p_type})"
-
-            rows.append(row_data)
-
-        return {"type": "database", "columns": columns, "rows": rows}
-    except Exception as e:
-        print(f"[Database Content Error] {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Failed to fetch database content: {str(e)}"
-        )
 
 
 # --- AI系エンドポイント (Step 3) ---
@@ -584,13 +475,13 @@ async def save_endpoint(save_req: SaveRequest):
 
             content = sanitize_image_data(content)
 
-            if len(content) > 10000:
+            if len(content) > NOTION_CONTENT_MAX_LENGTH:
                 print(
                     f"[Save] Warning: Extremely large content ({len(content)} chars). Truncating."
                 )
                 content = content[:10000] + "\n...(Truncated)..."
 
-            success = await append_block(save_req.target_db_id, content)
+            await append_block(save_req.target_db_id, content)
             return {"status": "success", "url": ""}
         else:
             sanitized_props = save_req.properties.copy()
@@ -607,12 +498,14 @@ async def save_endpoint(save_req: SaveRequest):
                         for item in val["rich_text"]:
                             if "text" in item:
                                 content = sanitize_val(item["text"]["content"])
-                                if len(content) > 2000:
-                                    for i in range(0, len(content), 2000):
+                                if len(content) > NOTION_BLOCK_CHAR_LIMIT:
+                                    for i in range(
+                                        0, len(content), NOTION_BLOCK_CHAR_LIMIT
+                                    ):
                                         new_item = item.copy()
                                         new_item["text"] = item["text"].copy()
                                         new_item["text"]["content"] = content[
-                                            i : i + 2000
+                                            i : i + NOTION_BLOCK_CHAR_LIMIT
                                         ]
                                         new_rich_text.append(new_item)
                                 else:
@@ -627,12 +520,14 @@ async def save_endpoint(save_req: SaveRequest):
                         for item in val["title"]:
                             if "text" in item:
                                 content = sanitize_val(item["text"]["content"])
-                                if len(content) > 2000:
-                                    for i in range(0, len(content), 2000):
+                                if len(content) > NOTION_BLOCK_CHAR_LIMIT:
+                                    for i in range(
+                                        0, len(content), NOTION_BLOCK_CHAR_LIMIT
+                                    ):
                                         new_item = item.copy()
                                         new_item["text"] = item["text"].copy()
                                         new_item["text"]["content"] = content[
-                                            i : i + 2000
+                                            i : i + NOTION_BLOCK_CHAR_LIMIT
                                         ]
                                         new_title.append(new_item)
                                 else:
@@ -649,6 +544,57 @@ async def save_endpoint(save_req: SaveRequest):
         raise HTTPException(
             status_code=500, detail=f"Failed to save to Notion: {str(e)}"
         )
+
+
+@router.patch("/api/pages/{page_id}")
+async def update_page(page_id: str, request: Request):
+    """
+    ページのプロパティを更新
+
+    ページのタイトルやその他のプロパティを更新します。
+    リクエストボディ例:
+    {
+        "properties": {
+            "Name": {"title": [{"text": {"content": "新しいタイトル"}}]}
+        }
+    }
+    """
+    from api.notion import update_page_properties
+
+    # レート制限チェック
+    await rate_limiter.check_rate_limit(
+        request, endpoint="update_page", custom_limit=20
+    )
+
+    try:
+        body = await request.json()
+        properties = body.get("properties", {})
+
+        if not properties:
+            raise HTTPException(
+                status_code=400, detail="プロパティが指定されていません"
+            )
+
+        # ページプロパティの更新
+        success = await update_page_properties(page_id, properties)
+
+        if success:
+            return {
+                "status": "success",
+                "message": "ページを更新しました",
+                "page_id": page_id,
+            }
+        else:
+            raise HTTPException(status_code=500, detail="ページの更新に失敗しました")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[Update Page Error] {e}")
+        import traceback
+
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"ページ更新エラー: {str(e)}")
 
 
 @router.post("/api/pages/create")

@@ -1,5 +1,5 @@
 import os
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
@@ -16,9 +16,7 @@ from contextlib import asynccontextmanager
 
 # --- 自作モジュールのインポート ---
 # Notion APIとの通信を担当する関数群
-from api.notion import (
-    update_page_properties,
-)
+# update_page_properties はendpoints.pyで使用
 
 # AI（Gemini等）との連携を担当する関数群
 
@@ -206,6 +204,35 @@ async def lifespan(app: FastAPI):
 
 # FastAPIアプリケーションのインスタンス作成
 app = FastAPI(lifespan=lifespan)
+
+
+# --- グローバル例外ハンドラー (Global Exception Handler) ---
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc: Exception):
+    """
+    全ての未処理例外をキャッチし、統一フォーマットでJSONレスポンスを返す
+
+    - DEBUG_MODE=True: 詳細なエラー情報とトレースバックを返す
+    - DEBUG_MODE=False: 最小限のエラー情報のみ返す（セキュリティ）
+    """
+    import traceback
+    from fastapi.responses import JSONResponse
+
+    # ログ出力（将来的にlogger使用）
+    print(f"[ERROR] Unhandled exception: {type(exc).__name__}: {str(exc)}")
+
+    # レスポンス内容
+    error_detail = {
+        "error": type(exc).__name__,
+        "message": str(exc) if DEBUG_MODE else "Internal server error",
+    }
+
+    # DEBUG_MODEの場合のみトレースバックを含める
+    if DEBUG_MODE:
+        error_detail["traceback"] = traceback.format_exc()
+
+    return JSONResponse(status_code=500, content=error_detail)
+
 
 # --- CORS (Cross-Origin Resource Sharing) 設定 ---
 # 本番環境では自動検出またはALLOWED_ORIGINS環境変数で設定
@@ -446,84 +473,13 @@ if DEBUG_MODE:
 
     # End of DEBUG_MODE section
 
-    # @app.get("/api/config") - endpoints.pyに移行済み
-    # async def get_config():
-    #     ...
 
-    # @app.get("/api/models") - endpoints.pyに移行済み
-    # async def get_models(all: bool = False):
-    #     ...
-
-    # --- Step 2: Notion参照系エンドポイント（endpoints.pyに移行済み） ---
-    # targets, schema → api/endpoints.py
-
-# --- Step 2: Notion参照系エンドポイント（endpoints.pyに移行済み） ---
-# targets, schema, content系5エンドポイント  api/endpoints.py
+# --- すべてのAPIエンドポイントはendpoints.pyに移行済み ---
+# System系、Notion参照系、AI系、Update系の全エンドポイントは api/endpoints.py に統合されています
 
 
-# --- AI系エンドポイント (endpoints.pyに移行済み) ---
-# analyze, chat → api/endpoints.py
-
-
-# --- Update系エンドポイント (endpoints.pyに移行済み) ---
-# save, create_page → api/endpoints.py
-
-
-# --- コンテンツプレビュー用エンドポイント (Content Preview) ---
-# フロントエンドで「参照中」のページやデータベースの中身を簡易表示するために使用します。
-
-
-# --- Content系エンドポイント（endpoints.pyに移行済み） ---
-# get_content, get_page_content, get_database_content  api/endpoints.py
-
-
-@app.patch("/api/pages/{page_id}")
-async def update_page(page_id: str, request: Request):
-    """
-    ページのプロパティを更新
-
-    ページのタイトルやその他のプロパティを更新します。
-    リクエストボディ例:
-    {
-        "properties": {
-            "Name": {"title": [{"text": {"content": "新しいタイトル"}}]}
-        }
-    }
-    """
-    # レート制限チェック
-    await rate_limiter.check_rate_limit(
-        request, endpoint="update_page", custom_limit=20
-    )
-
-    try:
-        body = await request.json()
-        properties = body.get("properties", {})
-
-        if not properties:
-            raise HTTPException(
-                status_code=400, detail="プロパティが指定されていません"
-            )
-
-        # ページプロパティの更新
-        success = await update_page_properties(page_id, properties)
-
-        if success:
-            return {
-                "status": "success",
-                "message": "ページを更新しました",
-                "page_id": page_id,
-            }
-        else:
-            raise HTTPException(status_code=500, detail="ページの更新に失敗しました")
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"[Update Page Error] {e}")
-        import traceback
-
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"ページ更新エラー: {str(e)}")
+# --- ページ更新エンドポイント（endpoints.pyに移行済み） ---
+# update_page → api/endpoints.py
 
 
 # --- 静的ファイルの配信設定 ---

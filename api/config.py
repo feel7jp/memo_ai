@@ -152,3 +152,19 @@ def is_provider_available(provider: str) -> bool:
 
     # その他のプロバイダーはAPIキーの存在確認のみ
     return get_api_key_for_provider(provider) is not None
+
+
+# --- アプリケーション定数 (Application Constants) ---
+
+# Notion API制限
+NOTION_BLOCK_CHAR_LIMIT = 2000  # Notion API single block character limit
+NOTION_CONTENT_MAX_LENGTH = 10000  # Maximum content length before truncation
+
+# 画像処理制限
+IMAGE_MAX_WIDTH = 1920  # Maximum image width for compression
+IMAGE_MAX_HEIGHT = 1080  # Maximum image height for compression
+IMAGE_QUALITY = 0.8  # JPEG compression quality (0.0 - 1.0)
+
+# API Retry設定
+API_MAX_RETRIES = 3  # Maximum number of API retry attempts
+API_RETRY_DELAY = 1.0  # Initial retry delay in seconds
