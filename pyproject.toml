@@ -26,10 +26,6 @@ testpaths = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 
-# Windows環境でのUTF-8出力対応
-[tool.pytest.ini_options.env]
-PYTHONIOENCODING = "utf-8"
-
 # デグレッション検知用マーカー
 markers = [
     "smoke: 最重要テスト（健全性チェック、CI高速実行用）",

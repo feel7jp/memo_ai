@@ -3,7 +3,7 @@
 import { 
     openDebugModal, closeDebugModal, loadDebugInfo, 
     initializeDebugMode, updateDebugModeUI, 
-    recordApiCall, copyLastApiCall 
+    recordApiCall, copyApiHistory, copyApiEntry 
 } from './debug.js';
 
 import { 
@@ -32,7 +32,8 @@ import {
 window.openDebugModal = openDebugModal;
 window.closeDebugModal = closeDebugModal;
 window.loadDebugInfo = loadDebugInfo;
-window.copyLastApiCall = copyLastApiCall;
+window.copyApiHistory = copyApiHistory;
+window.copyApiEntry = copyApiEntry;
 window.recordApiCall = recordApiCall; // chat.jsなどで使用
 
 window.capturePhotoFromCamera = capturePhotoFromCamera;
@@ -113,7 +114,8 @@ const App = {
         enabled: true,      // Frontend debug logging
         serverMode: false,  // Server DEBUG_MODE status
         showModelInfo: true, // Show model info in chat bubbles
-        lastApiCall: null,   // Last API call details
+        apiHistory: [],      // 直近10件のAPI通信履歴
+        lastBackendLogs: null,  // サーバーから取得したバックエンドログ
         lastModelList: null  // For debugging model list
     },
     
@@ -248,9 +250,13 @@ async function fetchWithCache(url, cacheKey, ttl = 60000) {
     
     debugLog(`Fetching ${url}`);
     const res = await fetch(url);
-    if (!res.ok) throw new Error(`Fetch failed: ${res.status}`);
+    if (!res.ok) {
+        recordApiCall(url, 'GET', null, null, `HTTP ${res.status}`, res.status);
+        throw new Error(`Fetch failed: ${res.status}`);
+    }
     
     const data = await res.json();
+    recordApiCall(url, 'GET', null, data, null, res.status);
     localStorage.setItem(cacheKey, JSON.stringify({
         timestamp: now,
         data: data
@@ -281,8 +287,12 @@ async function loadTargets(forceRefresh = false) {
             localStorage.removeItem(App.cache.KEYS.TARGETS);
             console.log('[loadTargets] Force refresh - fetching from API');
             const res = await fetch('/api/targets');
-            if (!res.ok) throw new Error(`Fetch failed: ${res.status}`);
+            if (!res.ok) {
+                recordApiCall('/api/targets', 'GET', null, null, `HTTP ${res.status}`, res.status);
+                throw new Error(`Fetch failed: ${res.status}`);
+            }
             data = await res.json();
+            recordApiCall('/api/targets', 'GET', null, data, null, res.status);
             // 取得したデータをキャッシュに保存
             localStorage.setItem(App.cache.KEYS.TARGETS, JSON.stringify({
                 timestamp: Date.now(),
@@ -457,12 +467,14 @@ async function handleTargetChange(skipRefreshOrEvent = false) {
             console.log('[DEBUG] Schema response status:', res.status, res.ok);
             if (res.ok) {
                 const data = await res.json();
+                recordApiCall(`/api/schema/${targetId}`, 'GET', null, data, null, res.status);
                 console.log('[DEBUG] Schema API response:', data);
                 console.log('[DEBUG] Schema data:', data.schema);
                 App.target.schema = data.schema;
                 console.log('[DEBUG] formContainer exists:', !!formContainer);
                 if (formContainer) renderDynamicForm(formContainer, data.schema);
             } else {
+                recordApiCall(`/api/schema/${targetId}`, 'GET', null, null, `HTTP ${res.status}`, res.status);
                 console.error('[DEBUG] Schema fetch failed with status:', res.status);
             }
         } catch (e) {
@@ -852,15 +864,21 @@ window.openNewPageModal = openNewPageModal;
 async function createNewPage(title) {
     setLoading(true, "ページ作成中...");
     try {
+        const reqBody = { page_name: title };
         const res = await fetch('/api/pages/create', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ page_name: title })
+            body: JSON.stringify(reqBody)
         });
         
-        if (!res.ok) throw new Error(await res.text());
+        if (!res.ok) {
+            const errText = await res.text();
+            recordApiCall('/api/pages/create', 'POST', reqBody, null, errText, res.status);
+            throw new Error(errText);
+        }
         
         const data = await res.json();
+        recordApiCall('/api/pages/create', 'POST', reqBody, data, null, res.status);
         showToast(`ページ「${title}」を作成しました`);
         
         // ターゲットリスト再読み込み（強制更新で最新のリストを取得）

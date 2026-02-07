@@ -460,6 +460,15 @@ if DEBUG_MODE:
             "raw_list": all_models,  # 全モデルの生データ
         }
 
+        # バックエンドAPIログ（Notion + LLM）
+        from api.notion import notion_api_log
+        from api.llm_client import llm_api_log
+
+        backend_logs = {
+            "notion": list(notion_api_log),
+            "llm": list(llm_api_log),
+        }
+
         return {
             "timestamp": timestamp,
             "environment": environment,
@@ -469,6 +478,7 @@ if DEBUG_MODE:
             "cors": cors_info,
             "routes": routes[:20],  # 最初の20個のみ
             "models": models_info,
+            "backend_logs": backend_logs,
         }
 
     # End of DEBUG_MODE section

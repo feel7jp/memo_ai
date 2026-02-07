@@ -4,16 +4,30 @@ pytest設定ファイル
 テスト用の共通フィクスチャを定義します。
 """
 
-import os
+import io
+import sys
 
-# Windows環境でのUTF-8出力対応（絵文字等を正しく表示するため）
-# ベストプラクティス: PYTHONUTF8=1 を設定
-os.environ["PYTHONUTF8"] = "1"
+# Windows cp932対策: stdout/stderrをUTF-8に強制（Mac/Linuxではスキップ）
+# NOTE: api.index のimportでロガーが絵文字を出力するため、import前に実行が必要
+for _stream_name in ("stdout", "stderr"):
+    _stream = getattr(sys, _stream_name)
+    if (
+        hasattr(_stream, "encoding")
+        and _stream.encoding
+        and _stream.encoding.lower() != "utf-8"
+    ):
+        setattr(
+            sys,
+            _stream_name,
+            io.TextIOWrapper(
+                _stream.buffer, encoding="utf-8", errors="replace", line_buffering=True
+            ),
+        )
 
-import pytest
-import pytest_asyncio
-from httpx import AsyncClient, ASGITransport
-from api.index import app
+import pytest  # noqa: E402
+import pytest_asyncio  # noqa: E402
+from httpx import AsyncClient, ASGITransport  # noqa: E402
+from api.index import app  # noqa: E402
 
 
 # pytest-asyncioの設定: 各テストを自動的にasyncioで実行

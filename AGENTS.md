@@ -111,7 +111,7 @@ memo_ai/
 │   ├── services.py         # ビジネスロジック層
 │   ├── model_discovery.py  # AI モデル動的検出
 │   ├── llm_client.py       # LiteLLM ラッパー
-│   ├── rate_limiter.py     # レート制限 (1000 req/hr)
+│   ├── rate_limiter.py     # レート制限
 │   └── logger.py           # 構造化ロギング設定
 │
 ├── public/                 # フロントエンド (Vanilla JS)
@@ -128,14 +128,14 @@ memo_ai/
 │       └── types.d.ts      # TypeScript型定義（jsconfig.json経由）
 │
 ├── tests/                  # テストスイート (pytest)
-│   ├── conftest.py         # 共通フィクスチャ、マーカー登録
-│   ├── test_*.py           # 各種テストファイル (61テスト)
+│   ├── conftest.py         # 共通フィクスチャ、マーカー登録、UTF-8出力設定
+│   ├── test_*.py           # 各種テストファイル
 │   └── __init__.py         # パッケージ初期化
 │
 ├── .env                    # ローカル秘密情報 (コミット禁止)
 ├── .env.example            # .env のテンプレート
 ├── requirements.txt        # Python 依存関係
-├── pyproject.toml          # プロジェクト設定、pytest設定
+├── pyproject.toml          # プロジェクト設定、pytest設定（唯一の設定源）
 └── vercel.json             # Vercel デプロイ設定
 ```
 
@@ -312,7 +312,7 @@ pytest -m integration # 統合テスト
 ### テストファイル構成
 | ファイル | 目的 |
 | :--- | :--- |
-| `tests/conftest.py` | 共通フィクスチャ、マーカー登録 |
+| `tests/conftest.py` | 共通フィクスチャ、マーカー登録、UTF-8出力設定 |
 | `tests/test_current_api.py` | 現API仕様のスモークテスト |
 | `tests/test_enhanced.py` | 境界値・ロジックテスト |
 | `tests/test_gap_coverage.py` | エラー処理・タイムアウト |
@@ -323,6 +323,7 @@ pytest -m integration # 統合テスト
 | `tests/test_llm_client.py` | LLM API連携・リトライ |
 | `tests/test_ai_internal.py` | プロンプト構築・JSON修復 |
 | `tests/test_model_discovery.py` | モデル検出・キャッシュ |
+| `tests/test_html_js_consistency.py` | HTML/JSセレクター整合性の静的解析 |
 
 ### エンドポイント移行時のテスト修正
 `api/index.py` から `api/endpoints.py` へ関数を移行した場合、テスト内のモックパス修正が必要:
@@ -497,12 +498,20 @@ with patch("api.endpoints.fetch_children_list", ...):
 
 Windows環境（cp932エンコーディング）では、Pythonの`print`文で絵文字を出力するとエラーになる場合がある。
 
-**解決策**: `PYTHONUTF8=1` 環境変数を設定
+**解決策**: `conftest.py` の**モジュールレベル（import前）**で `sys.stdout` を再構成する。
+`os.environ["PYTHONUTF8"] = "1"` だけでは pytest の内部エラーを防げない場合があるため。
 
 ```python
-# conftest.py など、テスト/スクリプトの先頭で設定
-import os
-os.environ["PYTHONUTF8"] = "1"
+# tests/conftest.py の先頭（他のimportより前）
+import sys, io
+
+# Windows cp932対策: stdout/stderrをUTF-8に強制（Mac/Linuxではスキップ）
+for s in ('stdout', 'stderr'):
+    stream = getattr(sys, s)
+    if hasattr(stream, 'encoding') and stream.encoding and stream.encoding.lower() != 'utf-8':
+        setattr(sys, s, io.TextIOWrapper(
+            stream.buffer, encoding='utf-8', errors='replace', line_buffering=True
+        ))
 ```
 
 ### pytestデバッグのベストプラクティス

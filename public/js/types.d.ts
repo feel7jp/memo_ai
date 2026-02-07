@@ -9,7 +9,8 @@ interface Window {
     openDebugModal: () => void;
     closeDebugModal: () => void;
     loadDebugInfo: () => void;
-    copyLastApiCall: () => void;
+    copyApiHistory: () => void;
+    copyApiEntry: (jsonString: string) => void;
     recordApiCall: (endpoint: string, method: string, request: any, response: any, error: string | null, status: number | null) => void;
     debugLog: (...args: any[]) => void;
     copyModelList: () => void;
@@ -108,7 +109,8 @@ interface Window {
             enabled: boolean;
             serverMode: boolean;
             showModelInfo: boolean;
-            lastApiCall: any;
+            apiHistory: any[];
+            lastBackendLogs: any;
             lastModelList: any;
         };
         defaultPrompt: string;

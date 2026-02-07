@@ -1,10 +1,9 @@
-"""
-LLM Client
-LiteLLMを利用してAIプロバイダーとの通信を統一的にハンドリングするクライアントモジュールです。
-APIコールの実行、エラーハンドリング、リトライ、コスト計算などの共通処理を実装しています。
-"""
+"""...LLM Client description..."""
 
 import asyncio
+import time
+from datetime import datetime
+from collections import deque
 from typing import Dict, Any
 from litellm import acompletion, completion_cost
 import litellm
@@ -16,6 +15,54 @@ logger = setup_logger(__name__)
 
 # LiteLLMの設定
 litellm.set_verbose = LITELLM_VERBOSE
+
+# デバッグ用: 直近10件のLLM API通信ログ
+llm_api_log = deque(maxlen=10)
+
+
+def _truncate_for_log(text, max_len=500):
+    """ログ用にテキストを制限"""
+    if not text or not isinstance(text, str):
+        return text
+    return text[:max_len] + "..." if len(text) > max_len else text
+
+
+def _sanitize_messages_for_log(messages):
+    """メッセージ配列からログ用に重いデータを省略"""
+    if not messages:
+        return []
+    result = []
+    for msg in messages:
+        entry = {"role": msg.get("role", "?")}
+        content = msg.get("content", "")
+        if isinstance(content, str):
+            entry["content"] = _truncate_for_log(content)
+        elif isinstance(content, list):  # マルチモーダル
+            entry["content"] = [
+                {"type": p.get("type"), "text": _truncate_for_log(p.get("text", ""))}
+                if p.get("type") == "text"
+                else {"type": "image_url", "summary": "[Image]"}
+                for p in content
+            ]
+        result.append(entry)
+    return result
+
+
+def _record_llm_log(model, messages, content, usage, cost, duration, attempt, error):
+    """LLM API通信をログに記録"""
+    llm_api_log.append(
+        {
+            "timestamp": datetime.now().isoformat(),
+            "model": model,
+            "messages": _sanitize_messages_for_log(messages),
+            "response": _truncate_for_log(content),
+            "usage": usage,
+            "cost": cost,
+            "duration_ms": round(duration * 1000) if duration else None,
+            "attempt": attempt + 1,
+            "error": error,
+        }
+    )
 
 
 async def generate_json(prompt: Any, model: str, retries: int = None) -> Dict[str, Any]:
@@ -45,6 +92,7 @@ async def generate_json(prompt: Any, model: str, retries: int = None) -> Dict[st
     if retries is None:
         retries = LITELLM_MAX_RETRIES
 
+    start_time = time.time()
     for attempt in range(retries + 1):
         try:
             # メッセージの準備
@@ -118,6 +166,18 @@ async def generate_json(prompt: Any, model: str, retries: int = None) -> Dict[st
             # OpenAI o1/o3: reasoning_tokensは数値のみ（内容は非公開）
             # usage.completion_tokens_details.reasoning_tokens で確認可能
 
+            # ログ記録（成功時）
+            _record_llm_log(
+                model,
+                messages,
+                content,
+                usage,
+                cost,
+                time.time() - start_time,
+                attempt,
+                None,
+            )
+
             return {
                 "content": content,
                 "usage": usage,
@@ -130,6 +190,17 @@ async def generate_json(prompt: Any, model: str, retries: int = None) -> Dict[st
             if attempt == retries:
                 # 最大リトライ回数に達した場合はエラーを再送出
                 logger.error("Generation failed after %d retries: %s", retries, e)
+                # ログ記録（エラー時）
+                _record_llm_log(
+                    model,
+                    messages,
+                    None,
+                    None,
+                    None,
+                    time.time() - start_time,
+                    attempt,
+                    str(e),
+                )
                 raise RuntimeError(f"AI generation failed: {str(e)}")
 
             # 指数バックオフ (Exponential Backoff)

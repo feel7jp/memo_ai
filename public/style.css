@@ -1311,10 +1311,8 @@ body {
     width: 90%;
 }
 
-/* デバッグ情報コンテンツ */
+/* デバッグ情報コンテンツ（スクロールは .modal-body に委譲） */
 .debug-info-content {
-    max-height: 600px;
-    overflow-y: auto;
 }
 
 .debug-timestamp {

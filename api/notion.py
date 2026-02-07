@@ -1,6 +1,9 @@
 import os
 import asyncio
 import httpx
+import time
+from datetime import datetime
+from collections import deque
 from typing import Dict, List, Optional, Any
 from api.logger import setup_logger
 
@@ -10,6 +13,33 @@ logger = setup_logger(__name__)
 # Notion APIのバージョンを指定（破壊的変更が多いため固定推奨）
 NOTION_VERSION = "2022-06-28"
 BASE_URL = "https://api.notion.com/v1"
+
+# デバッグ用: 直近10件のNotion API通信ログ
+notion_api_log = deque(maxlen=10)
+
+
+def _record_notion_log(
+    method: str,
+    endpoint: str,
+    status: Optional[int],
+    duration: float,
+    attempt: int,
+    error: Optional[str],
+    response_data: Optional[Dict],
+):
+    """Notion API通信をログに記録"""
+    notion_api_log.append(
+        {
+            "timestamp": datetime.now().isoformat(),
+            "method": method,
+            "endpoint": endpoint,
+            "status": status,
+            "duration_ms": round(duration * 1000),
+            "attempt": attempt + 1,
+            "error": error,
+            "response": response_data,  # 生のレスポンスデータをそのまま保存
+        }
+    )
 
 
 async def safe_api_call(
@@ -46,6 +76,7 @@ async def safe_api_call(
     }
 
     url = f"{BASE_URL}/{endpoint}"
+    start_time = time.time()
 
     # リトライループ
     for attempt in range(max_retries):
@@ -68,9 +99,22 @@ async def safe_api_call(
                     return None
 
                 response.raise_for_status()
-                return response.json()
+                result = response.json()
 
-        except httpx.ReadTimeout:
+                # ログ記録（成功時）
+                _record_notion_log(
+                    method,
+                    endpoint,
+                    response.status_code,
+                    time.time() - start_time,
+                    attempt,
+                    None,
+                    result,
+                )
+                return result
+
+        except httpx.ReadTimeout as e:
+            error_msg = f"ReadTimeout: {str(e)}"
             if attempt < max_retries - 1:
                 # 指数バックオフ: 1秒, 2秒, 4秒... と待機時間を倍にしていく
                 backoff = 2**attempt
@@ -86,9 +130,19 @@ async def safe_api_call(
                 logger.error(
                     "Final timeout on %s after %d attempts", endpoint, max_retries
                 )
+                _record_notion_log(
+                    method,
+                    endpoint,
+                    None,
+                    time.time() - start_time,
+                    attempt,
+                    error_msg,
+                    None,
+                )
                 raise
 
         except httpx.NetworkError as e:
+            error_msg = f"NetworkError: {str(e)}"
             if attempt < max_retries - 1:
                 backoff = 2**attempt
                 logger.warning(
@@ -106,10 +160,20 @@ async def safe_api_call(
                     max_retries,
                     e,
                 )
+                _record_notion_log(
+                    method,
+                    endpoint,
+                    None,
+                    time.time() - start_time,
+                    attempt,
+                    error_msg,
+                    None,
+                )
                 raise
 
         except httpx.HTTPStatusError as e:
             status = e.response.status_code
+            error_msg = f"HTTP {status}: {str(e)}"
             logger.warning("HTTP %d on %s %s", status, method, endpoint)
             # 500系エラーはサーバー側の問題なのでリトライする価値がある
             if status >= 500 and attempt < max_retries - 1:
@@ -122,15 +186,34 @@ async def safe_api_call(
                 )
                 await asyncio.sleep(backoff)
             else:
+                _record_notion_log(
+                    method,
+                    endpoint,
+                    status,
+                    time.time() - start_time,
+                    attempt,
+                    error_msg,
+                    None,
+                )
                 raise
 
         except Exception as e:
+            error_msg = f"{type(e).__name__}: {str(e)}"
             logger.error(
                 "Unexpected error on %s: %s - %s", endpoint, type(e).__name__, e
             )
             import traceback
 
             logger.debug(traceback.format_exc())
+            _record_notion_log(
+                method,
+                endpoint,
+                None,
+                time.time() - start_time,
+                attempt,
+                error_msg,
+                None,
+            )
             raise
 
     return None

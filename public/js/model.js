@@ -8,9 +8,13 @@ export async function loadAvailableModels() {
     try {
         // 全モデルを取得（推奨・非推奨の両方）
         const res = await fetch('/api/models?all=true');
-        if (!res.ok) throw new Error('Failed to load models');
+        if (!res.ok) {
+            window.recordApiCall('/api/models?all=true', 'GET', null, null, 'Failed to load models', res.status);
+            throw new Error('Failed to load models');
+        }
         
         const data = await res.json();
+        window.recordApiCall('/api/models?all=true', 'GET', null, data, null, res.status);
         
         // 全モデルを保存
         window.App.model.allModels = data.all || [];
