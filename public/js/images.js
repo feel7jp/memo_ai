@@ -229,31 +229,86 @@ export function readFileAsBase64(file) {
     });
 }
 
+/**
+ * Update visibility of the shared attachment area based on children
+ */
+function updateAttachmentAreaVisibility() {
+    const attachmentArea = document.getElementById('imageAttachmentArea');
+    const previewArea = document.getElementById('imagePreviewArea');
+    const genTagArea = document.getElementById('imageGenTagArea');
+    if (!attachmentArea) return;
+
+    const hasPreview = previewArea && !previewArea.classList.contains('hidden');
+    const hasGenTag = genTagArea && !genTagArea.classList.contains('hidden');
+
+    if (hasPreview || hasGenTag) {
+        attachmentArea.classList.remove('hidden');
+    } else {
+        attachmentArea.classList.add('hidden');
+    }
+}
+
 export function setPreviewImage(base64, mimeType) {
 
-    window.App.image.base64 = base64;
+    window.App.image.data = base64;
     window.App.image.mimeType = mimeType;
     
     const previewArea = document.getElementById('imagePreviewArea');
     /** @type {HTMLImageElement} */
-    const previewImg = /** @type {any} */(document.getElementById('previewImg'));
+    const previewImg = /** @type {any} */(document.getElementById('imagePreview'));
     
     previewImg.src = `data:${mimeType};base64,${base64}`;
     previewArea.classList.remove('hidden');
+    updateAttachmentAreaVisibility();
 
 }
 
 export function clearPreviewImage() {
 
-    window.App.image.base64 = null;
+    window.App.image.data = null;
     window.App.image.mimeType = null;
     
     const previewArea = document.getElementById('imagePreviewArea');
     /** @type {HTMLImageElement} */
-    const previewImg = /** @type {any} */(document.getElementById('previewImg'));
+    const previewImg = /** @type {any} */(document.getElementById('imagePreview'));
     
     previewImg.src = '';
-    previewArea.classList.add('hidden');
+    if (previewArea) {
+        previewArea.classList.add('hidden');
+    }
+    updateAttachmentAreaVisibility();
+    
+    window.debugLog('🗑️ Image preview cleared');
+}
+
+/**
+ * 画像生成モードを有効化
+ */
+export function enableImageGenMode() {
+    window.App.image.generationMode = true;
+    
+    const genTagArea = document.getElementById('imageGenTagArea');
+    if (genTagArea) {
+        genTagArea.classList.remove('hidden');
+    }
+    updateAttachmentAreaVisibility();
+    
+    window.debugLog('🎨 Image generation mode enabled');
+}
+
+/**
+ * 画像生成モードを無効化
+ */
+export function disableImageGenMode() {
+    window.App.image.generationMode = false;
+    
+    const genTagArea = document.getElementById('imageGenTagArea');
+    if (genTagArea) {
+        genTagArea.classList.add('hidden');
+    }
+    updateAttachmentAreaVisibility();
+    
+    window.debugLog('🗑️ Image generation mode disabled');
 }
 
 /**
@@ -358,6 +413,38 @@ export function setupImageHandlers() {
             }
         });
     }
+
+    // 4. Remove Image Handler
+    const removeImageBtn = document.getElementById('removeImageBtn');
+    if (removeImageBtn) {
+        removeImageBtn.addEventListener('click', (e) => {
+            e.stopPropagation(); // Prevent bubbling
+            clearPreviewImage();
+            
+            // Reset inputs to allow selecting the same file again
+            // Note: imageInput and cameraInput are defined in the closure of setupImageHandlers
+            if (imageInput) imageInput.value = '';
+            if (cameraInput) cameraInput.value = '';
+        });
+    }
     
+    // 5. Image Generation Button Handler
+    const imageGenBtn = document.getElementById('imageGenBtn');
+    if (imageGenBtn) {
+        imageGenBtn.addEventListener('click', () => {
+            enableImageGenMode();
+            if (mediaMenu) mediaMenu.classList.add('hidden');
+           showToast('画像生成モードを有効にしました');
+        });
+    }
+    
+    // 6. Remove Image Generation Tag Handler
+    const removeImageGenBtn = document.getElementById('removeImageGenBtn');
+    if (removeImageGenBtn) {
+        removeImageGenBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            disableImageGenMode();
+        });
+    }
 
 }

@@ -42,6 +42,7 @@ export async function loadDebugInfo() {
             throw new Error(`HTTP ${res.status}: ${res.statusText}`);
         }
         
+        /** @type {ConfigApiResponse} */
         const data = await res.json();
         renderDebugInfo(data);
     } catch (err) {
@@ -104,8 +105,28 @@ function renderDebugInfo(data) {
                 const isNotion = entry._type === 'notion';
                 const typeIcon = isNotion ? '🔗' : '🤖';
                 const typeLabel = isNotion ? 'Notion' : 'LLM';
+                
+                // エラーメッセージの抽出と表示準備
+                let errorSummary = '';
+                if (entry.error) {
+                    // エラーメッセージから重要な部分を抽出
+                    let errorMsg = entry.error;
+                    
+                    // HTTPステータスコードとメッセージを抽出
+                    const httpMatch = errorMsg.match(/HTTP (\d+):/);
+                    if (httpMatch) {
+                        errorSummary = ` <span style="color:#ff4d4f; font-size:0.85em;">(${httpMatch[1]})</span>`;
+                    }
+                    
+                    // "404 Not Found" や "400 Bad Request" などを抽出
+                    const statusMatch = errorMsg.match(/(\d{3})\s+([\w\s]+)'/);
+                    if (statusMatch) {
+                        errorSummary = ` <span style="color:#ff4d4f; font-size:0.85em;">(${statusMatch[1]} ${statusMatch[2]})</span>`;
+                    }
+                }
+                
                 const statusBadge = entry.error 
-                    ? `<span style="color:#ff4d4f">❌</span>`
+                    ? `<span style="color:#ff4d4f">❌${errorSummary}</span>`
                     : `<span style="color:#52c41a">✅${isNotion ? ' ' + entry.status : ''}</span>`;
                 
                 // LLMの場合、モデル選択の透明性情報を取得
@@ -385,6 +406,7 @@ export async function initializeDebugMode() {
             return;
         }
         
+        /** @type {ConfigApiResponse} */
         const data = await res.json();
         window.App.debug.serverMode = data.debug_mode || false;
         

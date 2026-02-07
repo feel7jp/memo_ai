@@ -1,0 +1,40 @@
+Testing Gemini image generation...
+
+=== Response type: <class 'litellm.types.utils.ModelResponse'>
+
+=== Response attributes:
+['choices', 'construct', 'copy', 'created', 'dict', 'from_orm', 'get', 'id', 'json', 'model', 'model_computed_fields', 'model_config', 'model_construct', 'model_copy', 'model_dump', 'model_dump_json', 'model_extra', 'model_fields', 'model_fields_set', 'model_json_schema', 'model_parametrized_name', 'model_post_init', 'model_rebuild', 'model_validate', 'model_validate_json', 'model_validate_strings', 'object', 'parse_file', 'parse_obj', 'parse_raw', 'schema', 'schema_json', 'system_fingerprint', 'to_dict', 'to_json', 'update_forward_refs', 'validate']
+
+=== response.choices[0]:
+Type: <class 'litellm.types.utils.Choices'>
+Attributes: ['construct', 'copy', 'dict', 'finish_reason', 'from_orm', 'get', 'index', 'json', 'message', 'model_computed_fields', 'model_config', 'model_construct', 'model_copy', 'model_dump', 'model_dump_json', 'model_extra', 'model_fields', 'model_fields_set', 'model_json_schema', 'model_parametrized_name', 'model_post_init', 'model_rebuild', 'model_validate', 'model_validate_json', 'model_validate_strings', 'parse_file', 'parse_obj', 'parse_raw', 'schema', 'schema_json', 'to_dict', 'to_json', 'update_forward_refs', 'validate']
+
+=== response.choices[0].message:
+Type: <class 'litellm.types.utils.Message'>
+Attributes: ['construct', 'content', 'copy', 'dict', 'from_orm', 'function_call', 'get', 'images', 'json', 'model_computed_fields', 'model_config', 'model_construct', 'model_copy', 'model_dump', 'model_dump_json', 'model_extra', 'model_fields', 'model_fields_set', 'model_json_schema', 'model_parametrized_name', 'model_post_init', 'model_rebuild', 'model_validate', 'model_validate_json', 'model_validate_strings', 'parse_file', 'parse_obj', 'parse_raw', 'provider_specific_fields', 'role', 'schema', 'schema_json', 'thinking_blocks', 'to_dict', 'to_json', 'tool_calls', 'update_forward_refs', 'validate']
+Content: None
+
+=== Checking for hidden/private attributes:
+_hidden_params: dict_keys(['custom_llm_provider', 'region_name', 'vertex_ai_grounding_metadata', 'vertex_ai_url_context_metadata', 'vertex_ai_safety_results', 'vertex_ai_citation_metadata', 'optional_params', 'litellm_call_id', 'api_base', 'model_id', 'response_cost', 'additional_headers', 'litellm_model_name', '_response_ms', 'litellm_overhead_time_ms'])
+model_extra: {'usage': Usage(completion_tokens=1290, prompt_tokens=4, total_tokens=1294, completion_tokens_details=CompletionTokensDetailsWrapper(accepted_prediction_tokens=None, audio_tokens=None, reasoning_tokens=None, rejected_prediction_tokens=None, text_tokens=0, image_tokens=1290), prompt_tokens_details=PromptTokensDetailsWrapper(audio_tokens=None, cached_tokens=None, text_tokens=4, image_tokens=None), cache_read_input_tokens=None), 'vertex_ai_grounding_metadata': [], 'vertex_ai_url_context_metadata': [], 'vertex_ai_safety_results': [], 'vertex_ai_citation_metadata': []}
+
+=== Response as dict:
+{
+  "id": "tKuHaY-5JaKdvr0PlqbSkAg",
+  "created": 1770498990,
+  "model": "gemini-2.5-flash-image",
+  "object": "chat.completion",
+  "system_fingerprint": null,
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": null,
+        "role": "assistant",
+        "tool_calls": null,
+        "function_call": null,
+        "images": [
+          {
+            "image_url": {
+              "url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAAQACAIAAADwf7zUAAAXXWNhQlgAABddanVtYgAAAB5qdW1kYzJwYQARABCAAACqADibcQNjMnBhAAAAFzdqdW1iAAAAR2p1bWRjMm1hABEAEIAAAKoAOJtxA3VybjpjMnBhOmU3ZDhiOTgxLTQyZTgtNWJiNi04NGEzLTRkMjY1OGM2NmQ1MAAAABOEanVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABNUY2JvctKEWQauogEmGCGCWQPCMIIDvjCCA0SgAwIBAgITf8DFXrYCzoMPnf3QSrAMRZ64JjAKBggqhkjOPQQDAzBRMQswCQYDVQQGEwJVUzETMBEGA1UECgwKR29vZ2xlIExMQzEtMCsGA1UEAwwkR29vZ2xlIEMyUEEgTWVkaWEgU2VydmljZXMgMVAgSUNBIEczMB4XDTI1MTAzMDIyMzQ0N1oXDTI2MTAyNTIyMzQ0NlowazELMAkGA1UEBhM

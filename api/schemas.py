@@ -39,3 +39,4 @@ class ChatRequest(BaseModel):
     image_data: Optional[str] = None  # 画像送信時のBase64データ
     image_mime_type: Optional[str] = None  # 画像のMIMEタイプ (例: image/jpeg)
     model: Optional[str] = None  # 使用するAIモデル
+    image_generation: Optional[bool] = False  # 画像生成モード

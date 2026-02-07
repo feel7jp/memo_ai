@@ -32,7 +32,12 @@ from api.notion import (
     safe_api_call,
     fetch_recent_pages,
 )
-from api.models import get_available_models, get_text_models, get_vision_models
+from api.models import (
+    get_available_models,
+    get_text_models,
+    get_vision_models,
+    get_image_generation_models,
+)
 from api.schemas import AnalyzeRequest, ChatRequest, SaveRequest
 
 from api.rate_limiter import rate_limiter
@@ -121,16 +126,33 @@ async def get_models(all: bool = False):
             DEFAULT_MULTIMODAL_MODEL
         )
 
+        # 画像生成モデルの可用性チェック
+        # 画像生成には特定のデフォルトがないため、利用可能な画像生成モデルの有無で判定
+        image_gen_models = get_image_generation_models()
+        if image_gen_models:
+            # 最もよく使われる画像生成モデル（存在する場合はgemini-2.5-flash-image）
+            first_image_gen_model = image_gen_models[0]
+            image_generation_availability = {
+                "available": True,
+                "model": first_image_gen_model["id"],
+            }
+        else:
+            image_generation_availability = {
+                "available": False,
+                "model": "Unknown",
+                "error": "No image generation models available. Check API keys.",
+            }
+
         return {
             "all": all_models,
             "text_only": text_only,
             "vision_capable": vision_capable,
-            "defaults": {
-                "text": DEFAULT_TEXT_MODEL,
-                "multimodal": DEFAULT_MULTIMODAL_MODEL,
-                "text_availability": text_availability,
-                "multimodal_availability": multimodal_availability,
-            },
+            "image_generation_capable": image_gen_models,
+            "default_text_model": DEFAULT_TEXT_MODEL,
+            "default_multimodal_model": DEFAULT_MULTIMODAL_MODEL,
+            "text_availability": text_availability,
+            "multimodal_availability": multimodal_availability,
+            "image_generation_availability": image_generation_availability,
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -570,6 +592,7 @@ async def chat_endpoint(request: Request, chat_req: ChatRequest):
                 image_data=chat_req.image_data,
                 image_mime_type=chat_req.image_mime_type,
                 model=chat_req.model,
+                image_generation=chat_req.image_generation or False,
             )
 
             return result

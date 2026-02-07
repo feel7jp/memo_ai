@@ -13,6 +13,7 @@ export async function loadAvailableModels() {
             throw new Error('Failed to load models');
         }
         
+        /** @type {ModelsApiResponse} */
         const data = await res.json();
         window.recordApiCall('/api/models?all=true', 'GET', null, data, null, res.status);
         
@@ -25,11 +26,12 @@ export async function loadAvailableModels() {
         // その他の設定
         window.App.model.textOnly = data.text_only || [];
         window.App.model.vision = data.vision_capable || [];
-        window.App.model.defaultText = data.defaults?.text;
-        window.App.model.defaultMultimodal = data.defaults?.multimodal;
+        window.App.model.defaultText = data.default_text_model;
+        window.App.model.defaultMultimodal = data.default_multimodal_model;
         // 利用可否情報の保存
-        window.App.model.textAvailability = data.defaults?.text_availability;
-        window.App.model.multimodalAvailability = data.defaults?.multimodal_availability;
+        window.App.model.textAvailability = data.text_availability;
+        window.App.model.multimodalAvailability = data.multimodal_availability;
+        window.App.model.imageGenerationAvailability = data.image_generation_availability;
         
         window.App.model.showAllModels = false;  // デフォルトは推奨のみ表示
         
@@ -119,6 +121,15 @@ export function renderModelList() {
         ? ` <span title="${window.App.model.multimodalAvailability.error}" style="color:#ff9800; cursor:help;">⚠️ ${window.App.model.multimodalAvailability.error}</span>`
         : (!visionModelInfo ? ' ⚠️' : '');
     
+    // 画像生成モデルの表示
+    const imageGenAvailability = window.App.model.imageGenerationAvailability;
+    const imageGenDisplay = imageGenAvailability?.available === true
+        ? imageGenAvailability.model.split('/').pop()  // "gemini/gemini-2.5-flash-image" -> "gemini-2.5-flash-image"
+        : 'Unknown';
+    const imageGenWarning = imageGenAvailability?.available === false
+        ? ` <span title="${imageGenAvailability.error}" style="color:#ff9800; cursor:help;">⚠️ ${imageGenAvailability.error}</span>`
+        : (!imageGenAvailability?.available ? ' ⚠️' : '');
+    
     // 表示モードトグル（推奨のみ / 全モデル）
     const toggleContainer = document.createElement('div');
     toggleContainer.style.cssText = 'display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: #f0f0f0; border-radius: 8px; margin-bottom: 8px;';
@@ -151,11 +162,13 @@ export function renderModelList() {
             <div class="model-name">✨ 自動選択 (推奨)</div>
             <div class="model-provider" style="display: flex; flex-direction: column; gap: 4px; margin-top: 4px;">
                 <div style="font-size: 0.9em;">📝 テキスト: <span style="font-weight: 500;">${textDisplay}${textWarning}</span></div>
-                <div style="font-size: 0.9em;">🖼️ 画像: <span style="font-weight: 500;">${visionDisplay}${visionWarning}</span></div>
+                <div style="font-size: 0.9em;">🖼️ 画像読み込み: <span style="font-weight: 500;">${visionDisplay}${visionWarning}</span></div>
+                <div style="font-size: 0.9em;">🎨 画像生成: <span style="font-weight: 500;">${imageGenDisplay}${imageGenWarning}</span></div>
             </div>
         </div>
         <span class="model-check">${window.App.model.tempSelected === null ? '✓' : ''}</span>
     `;
+
     autoItem.onclick = () => selectTempModel(null);
     modelList.appendChild(autoItem);
 
@@ -209,9 +222,10 @@ export function createModelItem(model) {
     
     // Vision対応アイコン
     const visionIcon = model.supports_vision ? ' 📷' : '';
+    const imageGenIcon = model.supports_image_generation ? ' 🎨' : '';
     
-    // [Provider] モデル名 [📷]
-    const displayName = `[${model.provider}] ${model.name}${visionIcon}`;
+    // [Provider] モデル名 [📷] [🎨]
+    const displayName = `[${model.provider}] ${model.name}${visionIcon}${imageGenIcon}`;
     
     // 非推奨バッジ（model_typeがあれば表示）
     const notRecommendedBadge = isNotRecommended && model.model_type

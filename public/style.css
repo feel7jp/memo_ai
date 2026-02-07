@@ -436,9 +436,10 @@ body {
     position: relative;
 }
 
-/* Image Preview Area */
-.image-preview-area {
+/* ===== Image Attachment Area (shared: image preview + image gen tag) ===== */
+.image-attachment-area {
     display: flex;
+    align-items: flex-start;
     gap: 10px;
     padding: 10px;
     background: #f9f9f9;
@@ -452,11 +453,30 @@ body {
 }
 
 .image-preview-item img {
-    max-width: 150px;
-    max-height: 150px;
+    max-width: 80px;
+    max-height: 80px;
     border-radius: 8px;
     object-fit: cover;
     display: block;
+}
+
+/* Image Gen Tag Item */
+.image-gen-tag-item {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+}
+
+.image-gen-tag {
+    display: inline-block;
+    padding: 6px 12px;
+    background: #fff3e0;
+    color: #f57c00;
+    border-radius: 16px;
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    border: 1px solid #ffe0b2;
 }
 
 .remove-image-btn {
@@ -1722,4 +1742,23 @@ body {
     background-color: #353b48 !important;
     color: var(--line-white) !important;
     padding: 8px 12px;
+}
+
+/* === 画像生成タグエリア === */
+/* (old image-gen-tag-area styles removed - now handled by .image-attachment-area) */
+
+/* === AI生成画像コンテナ === */
+.generated-image-container {
+    margin-top: 12px;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid #eee;
+}
+
+.generated-image {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    border-radius: 8px;
 }

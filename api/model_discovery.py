@@ -129,6 +129,7 @@ def get_gemini_models() -> List[Dict[str, Any]]:
                             "litellm_provider": "gemini",
                             "supports_vision": supports_vision,
                             "supports_json": not is_image_generation,
+                            "supports_image_generation": is_image_generation,
                             "description": getattr(model, "description", ""),
                             "recommended": is_recommended,
                             "supported_methods": list(methods),  # デバッグ用
@@ -174,8 +175,9 @@ def get_gemini_models() -> List[Dict[str, Any]]:
         return models
 
     except ImportError as e:
-        logger.warning("google-genai package not installed: %s", e)
-        logger.info("Install with: pip install -U google-genai")
+        logger.error("❌ CRITICAL: google-genai package not installed: %s", e)
+        logger.error("⚠️  Install with: pip install -U google-genai")
+        logger.error("⚠️  Or run: pip install -r requirements.txt")
         return []
     except Exception as e:
         logger.error("Failed to fetch Gemini models: %s: %s", type(e).__name__, e)

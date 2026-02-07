@@ -307,12 +307,14 @@ async def chat_analyze_text_with_ai(
     image_data: Optional[str] = None,
     image_mime_type: Optional[str] = None,
     model: Optional[str] = None,
+    image_generation: bool = False,
 ) -> Dict[str, Any]:
     """
-    インタラクティブチャット分析のメイン関数 (画像対応)
+    インタラクティブチャット分析のメイン関数 (画像対応・画像生成対応)
 
     テキストだけでなく、画像データ（Base64）を含めたマルチモーダルな対話を処理します。
     会話履歴を考慮し、ユーザーとの自然な対話を行いながら、必要に応じてタスク情報（properties）を抽出します。
+    また、image_generation=Trueの場合は画像生成モードとして動作します。
 
     Args:
         text: ユーザー入力テキスト
@@ -322,10 +324,62 @@ async def chat_analyze_text_with_ai(
         image_data: Base64エンコードされた画像データ（任意）
         image_mime_type: 画像のMIMEタイプ（任意）
         model: モデル指定
+        image_generation: 画像生成モード（True: 画像を生成, False: テキスト応答）
 
     Returns:
         dict: メッセージ、精製テキスト、抽出プロパティ、メタデータを含む辞書
     """
+    # 画像生成モードの処理
+    if image_generation:
+        from api.llm_client import generate_image_response
+
+        logger.info("[Chat AI] Image generation mode activated")
+
+        # 画像生成用モデル選択
+        requested_model = model or "auto"
+        selected_model = select_model_for_input(
+            has_image=False, user_selection=model, image_generation=True
+        )
+
+        logger.info("[Chat AI] Selected image generation model: %s", selected_model)
+
+        try:
+            result = await generate_image_response(
+                prompt=text or "Generate an image", model=selected_model
+            )
+
+            # 画像生成レスポンスの整形
+            return {
+                "message": result["message"],
+                "image_base64": result["image_base64"],
+                "properties": None,  # 画像生成時はNotion保存なし
+                "usage": result["usage"],
+                "cost": result["cost"],
+                "model": result["model"],
+                "model_selection": {
+                    "requested": requested_model,
+                    "used": selected_model,
+                    "fallback_occurred": bool(model and model != selected_model),
+                },
+            }
+
+        except Exception as e:
+            logger.error("[Chat AI] Image generation failed: %s", e)
+            return {
+                "message": f"画像生成中にエラーが発生しました: {str(e)}",
+                "image_base64": None,
+                "properties": None,
+                "usage": {},
+                "cost": 0.0,
+                "model": selected_model,
+                "model_selection": {
+                    "requested": requested_model,
+                    "used": selected_model,
+                    "fallback_occurred": False,
+                },
+            }
+
+    # 通常のテキスト/画像認識モードの処理（既存ロジック）
     # 画像の有無に基づくモデル自動選択
     has_image = bool(image_data and image_mime_type)
     logger.debug("[Chat AI] Has image: %s, User model selection: %s", has_image, model)

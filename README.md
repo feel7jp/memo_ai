@@ -9,22 +9,24 @@ Notionを記憶媒体として使用する、シンプルでカスタマイズ�
 
 Python 3.9以上が必要です。
 
-### セットアップ
 
-ターミナルで以下を実行して、準備を整えます。
+### 対応モデル
 
-```bash
-# 仮想環境の作成
-python -m venv venv
+- **Gemini 2.5 Flash Image** (推奨) 🎨
+- Gemini 2.0 Flash Exp Image Generation
+- Gemini 3 Pro Image Preview
 
-# 仮想環境の有効化 (Windows)
-venv\Scripts\activate
-# 仮想環境の有効化 (Mac/Linux)
-source venv/bin/activate
+モデル選択画面で 🎨 アイコンが付いているモデルが画像生成に対応しています。
 
-# 必要なパッケージのインストール
-pip install -r requirements.txt
-```
+### 注意事項
+
+- 画像生成モードでは、通常のチャット機能とは異なるAIモデルが使用されます
+- 生成には数秒から十数秒かかる場合があります
+- `✕` ボタンで画像生成モードを解除できます
+
+---
+
+## 📝 主な機能
 
 ### 設定 (.env)
 
@@ -49,17 +51,34 @@ NOTION_API_KEY=your_key_here
 NOTION_ROOT_PAGE_ID=your_page_id_here
 ```
 
+### セットアップ
+
+ターミナルで以下を実行して、準備を整えます。
+
+```bash
+# 仮想環境の作成
+python -m venv venv
+
+# 仮想環境の有効化 (Windows)
+venv\Scripts\activate
+# 仮想環境の有効化 (Mac/Linux)
+source venv/bin/activate
+
+# 必要なパッケージのインストール
+pip install -r requirements.txt
+```
+
 ### 起動
 
 以下のコマンドでサーバーを立ち上げます。
 
 ```bash
-# PC内でのみ利用する場合
 python -m uvicorn api.index:app --reload --host 0.0.0.0
-#  --host 0.0.0.0　スマホやタブレットからもアクセスしたい場合のオプション
 ```
 
 ブラウザで `http://localhost:8000` にアクセスすれば完了です！
+
+> **💡 ヒント**: ポート8000が既に使用中の場合、uvicornは自動的にエラーを出して起動を中止します。
 
 #### スマホ・タブレットからのアクセス方法
 

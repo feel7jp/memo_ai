@@ -118,12 +118,18 @@
             </div>
 
             <!-- メッセージ入力エリア -->
-            <div class="input-area">
-                <!-- 画像プレビューエリア -->
-                <div id="imagePreviewArea" class="image-preview-area hidden">
-                    <div class="image-preview-item">
-                        <img id="previewImg" src="" alt="Preview">
-                        <button id="removeImageBtn" class="remove-image-btn">×</button>
+            <div class="message-input-area">
+                <!-- 画像プレビュー & 画像生成タグ (共有エリア) -->
+                <div id="imageAttachmentArea" class="image-attachment-area hidden">
+                    <!-- 画像プレビュー -->
+                    <div id="imagePreviewArea" class="image-preview-item hidden">
+                        <img id="imagePreview" src="" alt="Preview">
+                        <button id="removeImageBtn" class="remove-image-btn">✕</button>
+                    </div>
+                    <!-- 画像生成タグ -->
+                    <div id="imageGenTagArea" class="image-gen-tag-item hidden">
+                        <span class="image-gen-tag">🎨 画像生成</span>
+                        <button id="removeImageGenBtn" class="remove-image-btn">✕</button>
                     </div>
                 </div>
 
@@ -140,6 +146,7 @@
                 <div id="mediaMenu" class="media-menu hidden">
                     <button id="cameraBtn">📷 カメラ</button>
                     <button id="galleryBtn">🖼️ 画像を選択</button>
+                    <button id="imageGenBtn">🎨 画像生成</button>
                 </div>
 
                 <!-- 絵文字パレット -->

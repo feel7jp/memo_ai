@@ -59,6 +59,7 @@ window.selectTempModel = selectTempModel;
 window.saveModelSelection = saveModelSelection;
 window.closeModelModal = closeModelModal;
 window.copyModelList = () => import('./debug.js').then(m => m.copyModelList()); // 動的インポートまたはdebug.jsでexport
+window.debugLog = debugLog;
 
 // --- Global State ---
 
@@ -94,8 +95,9 @@ const App = {
     },
     
     image: {
-        base64: null,
-        mimeType: null
+        data: null,  // Base64画像データ
+        mimeType: null,  // MIMEタイプ
+        generationMode: false,  // 画像生成モード
     },
     
     model: {
@@ -110,7 +112,8 @@ const App = {
         showAllModels: false, // UI toggle state
         sessionCost: 0,      // Session running cost
         textAvailability: null,      // Availability of default text model
-        multimodalAvailability: null // Availability of default multimodal model
+        multimodalAvailability: null, // Availability of default multimodal model
+        imageGenerationAvailability: null // Availability of image generation models
     },
     
     debug: {
@@ -160,6 +163,7 @@ async function performSaveRequest(payload, messages) {
         throw new Error(errorText);
     }
     
+    /** @type {SaveApiResponse} */
     const data = await res.json();
     recordApiCall('/api/save', 'POST', payload, data, null, res.status);
     updateSaveStatus(`✅ ${messages.success}`);
@@ -542,6 +546,7 @@ async function handleTargetChange(skipRefreshOrEvent = false) {
         try {
             const res = await fetch(`/api/schema/${targetId}`);
             if (res.ok) {
+                /** @type {SchemaApiResponse} */
                 const data = await res.json();
                 recordApiCall(`/api/schema/${targetId}`, 'GET', null, data, null, res.status);
                 App.target.schema = data.schema;
@@ -703,7 +708,7 @@ async function saveToDatabase() {
     if (!memoInput) return;
     const content = memoInput.value;
     
-    if (!content && !App.image.base64) {
+    if (!content && !App.image.data) {
         showToast('メモまたは画像を入力してください');
         return;
     }
@@ -783,7 +788,7 @@ async function saveToPage() {
     if (!memoInput) return;
     const content = memoInput.value;
     
-    if (!content && !App.image.base64) {
+    if (!content && !App.image.data) {
         showToast('メモまたは画像を入力してください');
         return;
     }
@@ -922,6 +927,7 @@ async function createNewPage(title) {
             throw new Error(errText);
         }
         
+        /** @type {CreatePageApiResponse} */
         const data = await res.json();
         recordApiCall('/api/pages/create', 'POST', reqBody, data, null, res.status);
         showToast(`ページ「${title}」を作成しました`);
@@ -1015,7 +1021,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 // EnterのみはチャットAI送信とする（仕様確認要だが既存踏襲）
                 
                 const text = /** @type {HTMLTextAreaElement} */(memoInput).value.trim();
-                if (text || App.image.base64) {
+                if (text || App.image.data) {
                     handleChatAI(text);
                 }
             }
