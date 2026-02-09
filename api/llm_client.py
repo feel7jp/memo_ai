@@ -397,50 +397,12 @@ async def generate_image_response(prompt: str, model: str) -> Dict[str, Any]:
         except Exception as e:
             logger.warning("Cost calculation failed for image generation: %s", e)
 
-        # --- 画像トークンのコスト手動フォールバック ---
-        # 背景: LiteLLMの既知バグ (GitHub Issue #17410) により、
-        # Gemini画像生成モデルの completion_cost() が image_tokens を
-        # 正しく認識できず cost=0 を返す問題がある。
-        #
+        # ⚠️ 既知の問題: LiteLLMのバグ (GitHub Issue #17410) により、
+        # Gemini画像生成モデルの completion_cost() が image_tokens を正しく認識できず、
+        # cost=0 を返す場合があります。この問題はLiteLLM側での修正待ちです。
         # 画像出力トークンの単価はテキストの12倍 ($30/1M vs $2.5/1M) と高額なため、
-        # コスト追跡が壊れるとユーザーが消費量を把握できなくなる。
-        #
-        # 対策: completion_cost が 0 を返した場合、usage 内の image_tokens を検出し、
-        # Google公式料金に基づいて手動計算するフォールバックを実装。
-        # LiteLLMのバグが修正されたら、このフォールバックは自動的に不要になる
-        # （completion_cost が正しい値を返すため、この分岐には入らない）。
-        #
-        # 参考料金 (2026-02時点):
-        #   - gemini-2.5-flash-image 画像出力: $30 / 1M tokens
-        #   - gemini-2.5-flash-image テキスト出力: $2.5 / 1M tokens (通常)
-        #   - gemini-2.5-flash-image テキスト入力: $0.15 / 1M tokens
-        if cost == 0 and usage:
-            image_tokens = 0
-            text_output_tokens = 0
-            input_tokens = usage.get("prompt_tokens", 0) or 0
-
-            # completion_tokens_details から image_tokens と text_tokens を抽出
-            details = usage.get("completion_tokens_details") or {}
-            if isinstance(details, dict):
-                image_tokens = details.get("image_tokens", 0) or 0
-                text_output_tokens = details.get("text_tokens", 0) or 0
-
-            if image_tokens > 0:
-                # Gemini 2.5 Flash Image の公式料金で手動計算
-                IMAGE_OUTPUT_COST_PER_TOKEN = 30.0 / 1_000_000   # $30 / 1M tokens
-                TEXT_OUTPUT_COST_PER_TOKEN = 2.5 / 1_000_000     # $2.5 / 1M tokens
-                TEXT_INPUT_COST_PER_TOKEN = 0.15 / 1_000_000     # $0.15 / 1M tokens
-
-                cost = (
-                    image_tokens * IMAGE_OUTPUT_COST_PER_TOKEN
-                    + text_output_tokens * TEXT_OUTPUT_COST_PER_TOKEN
-                    + input_tokens * TEXT_INPUT_COST_PER_TOKEN
-                )
-                logger.info(
-                    "[Image Gen] Manual cost fallback: image_tokens=%d, "
-                    "text_tokens=%d, input_tokens=%d -> cost=$%.6f",
-                    image_tokens, text_output_tokens, input_tokens, cost,
-                )
+        # 実際のコストとデバッグパネルの表示が乖離する可能性があります。
+        # Google Cloud Consoleで実際の請求額を確認することを推奨します。
 
         duration = time.time() - start_time
 
