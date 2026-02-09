@@ -334,6 +334,10 @@ async def generate_image_response(prompt: str, model: str) -> Dict[str, Any]:
                             image_base64 = url.split("base64,", 1)[1]
                             break
 
+            # 画像生成成功時にテキストが空の場合のデフォルトメッセージ
+            if image_base64 and not message_text:
+                message_text = "画像を生成しました"
+
             if not image_base64:
                 # デバッグ用: レスポンス構造をログに出力
                 logger.error(

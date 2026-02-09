@@ -5,7 +5,7 @@
 
 > **必読**: 新しいタスクを開始する前に、必ずこのファイルを読んでください。
 > 英語で思考し、ユーザーの言語で返答する。Implementation Plan、コードコメントはユーザーの言語で記述する。
-
+- リダイレクトの使用禁止 (例: `pytest.py -v 2>&1 | Select-Object` など)
 ---
 
 ## Do (必ず行う)
@@ -35,7 +35,7 @@
 - SQLite, Postgres 等のローカル DB 追加提案 (Notion のみ使用)
 - Webpack, Vite 等のビルドツール導入
 - React, Vue, Next.js への移行提案
-- リダイレクトの使用禁止 (npm run type-check > tsc_errors.txt 2>&1 など)　使用許可を自動化できないため。
+- リダイレクトの使用禁止 (例: `pytest.py -v 2>&1 | Select-Object` など)　使用許可を自動化できないため。
 
 ---
 

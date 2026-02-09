@@ -671,8 +671,9 @@ export async function handleChatAI(inputText = null) {
             cost: data.cost
         });
         
-        // 5. AIメッセージの表示
-        if (data.message) {
+        // 5. AIメッセージの表示（画像生成時はmessageが空でもimage_base64があればOK）
+        if (data.message || data.image_base64) {
+            const displayMessage = data.message || '';
             const modelInfo = {
                 model: data.model,
                 usage: data.usage,
@@ -682,9 +683,9 @@ export async function handleChatAI(inputText = null) {
                     image_properties: data.metadata?.image_properties || null
                 }
             };
-            addChatMessage('ai', data.message, data.properties || null, modelInfo);
+            addChatMessage('ai', displayMessage, data.properties || null, modelInfo);
             // プロパティ情報をセッション履歴に含めて後続会話で参照可能にする
-            let sessionContent = data.message;
+            let sessionContent = displayMessage;
             if (data.properties) {
                 const propSummary = Object.entries(data.properties)
                     .map(([k, v]) => {
@@ -697,10 +698,12 @@ export async function handleChatAI(inputText = null) {
                     .join(' / ');
                 sessionContent += `\n[抽出データ: ${propSummary}]`;
             }
-            window.App.chat.session.push({role: 'assistant', content: sessionContent});
+            if (sessionContent) {
+                window.App.chat.session.push({role: 'assistant', content: sessionContent});
+            }
         } else {
-            console.warn('[handleChatAI] data.message is falsy');
-            const warningMsg = `⚠️ AIからの応答メッセージが空でした（model: ${data.model || 'unknown'}）`;
+            console.warn('[handleChatAI] data.message and image_base64 are both falsy');
+            const warningMsg = `⚠️ AIからの応答が空でした（model: ${data.model || 'unknown'}）`;
             addChatMessage('system', warningMsg);
         }
         
