@@ -101,20 +101,16 @@ def get_gemini_models() -> List[Dict[str, Any]]:
                     # チャット用途（generateContent）かどうかで推奨判定
                     is_recommended = "generateContent" in methods
 
-                    # Vision対応の判定: モデルのメタデータから判定
-                    # Gemini APIはinput_token_limitやsupported_modesで判定可能
-                    # フォールバック: generateContentがある場合は基本的にVision対応と仮定
-                    supports_vision = False
-                    if hasattr(model, "supported_modes"):
-                        # 新しいAPIではsupported_modesで判定
-                        supports_vision = any(
-                            "vision" in str(mode).lower()
-                            for mode in model.supported_modes
-                        )
-                    elif "generateContent" in methods:
-                        # generateContentがあればマルチモーダル（Vision対応）の可能性が高い
-                        # ただし、embedding系は除外
-                        supports_vision = "embed" not in model_name.lower()
+                    # Vision対応の判定（名前ベース）
+                    # Gemini APIはVision対応かどうかをメタデータで公開していないため、
+                    # モデル名パターンで判定する。非対応モデルを明示的に除外する方式。
+                    # - gemma系: 軽量OSSモデル（テキスト専用）
+                    # - embed系: 埋め込みモデル（テキスト専用）
+                    # - aqa: Attributed Question Answering（テキスト専用）
+                    NON_VISION_PATTERNS = ["gemma", "embed", "aqa"]
+                    supports_vision = "generateContent" in methods and not any(
+                        p in model_name.lower() for p in NON_VISION_PATTERNS
+                    )
 
                     # 画像生成モデルの検出
                     # 命名規則: Gemini画像モデルは全て "image" を含む

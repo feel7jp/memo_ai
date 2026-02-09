@@ -70,3 +70,46 @@ class TestModelDiscovery:
         # キャッシュから返されること（API呼び出しなし）
         assert isinstance(result, list)
         assert len(result) > 0  # キャッシュされたデータが返る
+
+    def test_vision_capability_detection(self):
+        """
+        Vision対応の判定が正しく行われること（名前ベースの判定）
+
+        - gemini系モデル → Vision対応
+        - gemma系モデル → Vision非対応（テキスト専用）
+        - embedding系 → Vision非対応
+        - aqa系 → Vision非対応
+        """
+        from api.model_discovery import get_gemini_models
+
+        models = get_gemini_models()
+
+        # APIキーがない場合はスキップ
+        if not models:
+            pytest.skip("GEMINI_API_KEY not set, skipping vision detection test")
+
+        # モデル名→Vision対応の期待値マッピング
+        expected_vision_support = {
+            "gemini-2.5-flash": True,
+            "gemini-2.5-pro": True,
+            "gemini-3-flash-preview": True,
+            "gemini-3-pro-preview": True,
+            "gemma-3-1b-it": False,  # gemma は Vision非対応
+            "gemma-3-4b-it": False,
+            "gemma-3-12b-it": False,
+            "gemini-embedding-001": False,  # embedding は Vision非対応
+            "aqa": False,  # aqa は Vision非対応
+        }
+
+        for model in models:
+            model_name = model.get("name", "")
+
+            # 期待値が定義されているモデルのみチェック
+            if model_name in expected_vision_support:
+                expected = expected_vision_support[model_name]
+                actual = model.get("supports_vision", False)
+
+                assert actual == expected, (
+                    f"Model '{model_name}' vision support mismatch: "
+                    f"expected {expected}, got {actual}"
+                )

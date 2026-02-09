@@ -1,6 +1,7 @@
 """...LLM Client description..."""
 
 import asyncio
+import os
 import time
 from datetime import datetime
 from collections import deque
@@ -14,7 +15,10 @@ from api.logger import setup_logger
 logger = setup_logger(__name__)
 
 # LiteLLMの設定
-litellm.set_verbose = LITELLM_VERBOSE
+# Vercel環境では ANSI カラーコードを含む verbose ログを無効化
+# (ローカル開発では LITELLM_VERBOSE 環境変数で制御可能)
+IS_VERCEL = os.environ.get("VERCEL") == "1"
+litellm.set_verbose = False if IS_VERCEL else LITELLM_VERBOSE
 
 # デバッグ用: 直近10件のLLM API通信ログ
 llm_api_log = deque(maxlen=10)
