@@ -15,7 +15,7 @@
 ### Code Quality
 - **共通ロジックは関数化**: プロパティ収集、バリデーション等の重複コード→共通関数に抽出（例: `collectPropertiesFromForm()`）
 - **console.log の適正使用**: 本番コードでの過剰なログ出力は削除。デバッグ用は`App.debug.enabled`でガード
-- **DRY原則**: `chat.js` と `main.js` で同一ロジック発見→即座に共通関数化
+- **DRY原則**: `chat.js` と `main.js` で同一ロジック発見→即座に共通関数化（例: `getModelDisplayName()`, `_mergeAndSortLogs()`）
 
 ### Don't
 - TailwindCSS を使用しない

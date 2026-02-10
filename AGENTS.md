@@ -82,7 +82,7 @@ python -m uvicorn api.index:app --reload --host 0.0.0.0
 | :--- | :--- |
 | `AGENTS.md` | Backend固有ルール |
 | `index.py` | **FastAPIアプリ本体** — ライフスパン管理、CORS、例外ハンドラ、静的ファイル配信、デバッグエンドポイント |
-| `endpoints.py` | **全APIルート定義** — `/api/health`, `/api/config`, `/api/models`, `/api/targets`, `/api/schema`, `/api/content`, `/api/analyze`, `/api/chat`, `/api/save`, `/api/update`, `/api/create-page` |
+| `endpoints.py` | **全APIルート定義** — `/api/health`, `/api/config`, `/api/models`, `/api/targets`, `/api/schema`, `/api/content`, `/api/analyze`, `/api/chat`, `/api/save`, `/api/update`, `/api/create-page`。エラーレスポンスは `_build_error_detail()` で統一 |
 | `ai.py` | **AIプロンプト構築** — スキーマ→プロンプト変換、JSON応答検証・修正、`analyze_text_with_ai()`, `chat_analyze_text_with_ai()` |
 | `llm_client.py` | **LLM API通信** — LiteLLM経由の`generate_json()`, マルチモーダル対応, 画像生成(`generate_image_response()`), リトライ・コスト計算・通信ログ |
 | `models.py` | **モデル管理** — 動的レジストリ構築、推奨モデルリスト、モデル自動選択(`select_model_for_input()`)、可用性チェック |
@@ -90,7 +90,7 @@ python -m uvicorn api.index:app --reload --host 0.0.0.0
 | `notion.py` | **Notion API通信** — `safe_api_call()`（リトライ・指数バックオフ）、ページ/DB CRUD、スキーマ取得、ブロック追加 |
 | `config.py` | **設定集約** — 全環境変数の読み込み・検証、APIキー管理、デフォルトモデル、LiteLLM設定、定数 |
 | `schemas.py` | **Pydanticモデル** — `AnalyzeRequest`, `SaveRequest`, `ChatRequest` のリクエストスキーマ定義 |
-| `services.py` | **ビジネスロジックヘルパー** — Base64画像除去、Notionプロパティサニタイズ・分割、タイトル自動生成、コンテンツブロック変換 |
+| `services.py` | **ビジネスロジックヘルパー** — `extract_plain_text()`（plain_text抽出の共通化）、Base64画像除去、Notionプロパティサニタイズ・分割、タイトル自動生成、コンテンツブロック変換 |
 | `rate_limiter.py` | **レート制限** — グローバル1000 req/h、エンドポイント別制限、自動クリーンアップ |
 | `logger.py` | **ロギング基盤** — `setup_logger()` で全モジュール統一ログ、DEBUG_MODEでレベル自動切替 |
 | `__init__.py` | パッケージ初期化 |
@@ -132,6 +132,7 @@ python -m uvicorn api.index:app --reload --host 0.0.0.0
 | `test_html_js_consistency.py` | **HTML/JS整合性テスト** — HTML内のIDとJSの参照整合性を検証 |
 | `test_current_api.py` | エンドポイントの単体テスト |
 | `test_services.py` | `services.py` のヘルパー関数テスト |
+| `test_extract_plain_text.py` | `extract_plain_text()` の単体テスト |
 | `test_llm_client.py` | `llm_client.py` のLLM通信テスト |
 | `test_ai_internal.py` | `ai.py` 内部ロジック（プロンプト構築、JSON検証）テスト |
 | `test_enhanced.py` | 拡張テスト（エッジケース等） |
@@ -203,6 +204,6 @@ python -m uvicorn api.index:app --reload --host 0.0.0.0
 
 ### コード品質
 - **デッドコード削除**: テスト専用関数は本番に不要。`grep_search`で使用箇所0件なら削除
-- **DRY原則**: 3回以上の重複→ヘルパー関数に抽出（例：スキーマ整形、プロパティ値抽出）
+- **DRY原則**: 3回以上の重複→ヘルパー関数に抽出（例：`extract_plain_text()`、`_build_error_detail()`、`getModelDisplayName()`）
 - **ロギング統一**: バックエンドは `logger.info()`、フロントエンドは `App.debug.enabled` でガード
 - **関数の責務**: 1関数50行超→分割検討。重複コードは即座にヘルパー化

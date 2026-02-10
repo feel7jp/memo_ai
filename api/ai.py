@@ -11,6 +11,7 @@ from typing import Dict, Any, List, Optional
 
 from api.llm_client import generate_json, prepare_multimodal_prompt
 from api.models import select_model_for_input
+from api.services import extract_plain_text
 from api.logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -74,11 +75,9 @@ def construct_prompt(
                 p_type = v.get("type")
                 val = "N/A"
                 if p_type == "title":
-                    val = "".join([t.get("plain_text", "") for t in v.get("title", [])])
+                    val = extract_plain_text(v.get("title", []))
                 elif p_type == "rich_text":
-                    val = "".join(
-                        [t.get("plain_text", "") for t in v.get("rich_text", [])]
-                    )
+                    val = extract_plain_text(v.get("rich_text", []))
                 elif p_type == "select":
                     val = v.get("select", {}).get("name") if v.get("select") else None
                 elif p_type == "multi_select":
@@ -204,13 +203,13 @@ def validate_and_fix_json(json_str: str, schema: Dict[str, Any]) -> Dict[str, An
         elif target_type == "title":
             # Title型: Rich Text オブジェクト構造
             if isinstance(v, list):
-                v = "".join([t.get("plain_text", "") for t in v if "plain_text" in t])
+                v = extract_plain_text(v)
             validated[k] = {"title": [{"text": {"content": str(v)}}]}
 
         elif target_type == "rich_text":
             # Rich Text型
             if isinstance(v, list):
-                v = "".join([t.get("plain_text", "") for t in v if "plain_text" in t])
+                v = extract_plain_text(v)
             validated[k] = {"rich_text": [{"text": {"content": str(v)}}]}
 
         elif target_type == "people":

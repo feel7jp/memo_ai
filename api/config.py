@@ -116,7 +116,7 @@ LITELLM_TIMEOUT = int(os.getenv("LITELLM_TIMEOUT", "30"))  # タイムアウト�
 LITELLM_MAX_RETRIES = int(os.getenv("LITELLM_MAX_RETRIES", "1"))  # 最大再試行回数
 
 
-def get_api_key_for_provider(provider: str) -> Optional[str]:
+def _get_api_key_for_provider(provider: str) -> Optional[str]:
     """
     指定されたプロバイダーに対応するAPIキーまたは認証情報パスを返します。
 
@@ -151,7 +151,7 @@ def is_provider_available(provider: str) -> bool:
         return bool(GOOGLE_APPLICATION_CREDENTIALS and VERTEX_AI_PROJECT)
 
     # その他のプロバイダーはAPIキーの存在確認のみ
-    return get_api_key_for_provider(provider) is not None
+    return _get_api_key_for_provider(provider) is not None
 
 
 # --- アプリケーション定数 (Application Constants) ---

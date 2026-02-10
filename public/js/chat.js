@@ -2,6 +2,17 @@
 // チャット履歴管理とAI通信機能
 
 /**
+ * モデルIDから表示用の名前を取得
+ * @param {string} modelId - モデルID
+ * @param {string} [fallback] - モデルが見つからない場合のフォールバック
+ * @returns {string} "[provider] name" 形式の表示名
+ */
+function getModelDisplayName(modelId, fallback = null) {
+    const info = window.App.model.available.find(m => m.id === modelId);
+    return info ? `[${info.provider}] ${info.name}` : (fallback || modelId || 'Auto');
+}
+
+/**
  * Notion API形式のプロパティ値から表示用テキストを汎用的に抽出する
  * @param {any} val - Notion API形式のプロパティ値
  * @returns {string} 表示用テキスト
@@ -185,10 +196,7 @@ export function renderChatHistory() {
             const { model, usage, cost } = entry.modelInfo;
             
             // Try to find model info to get provider prefix
-            const modelInfo = window.App.model.available.find(m => m.id === model);
-            const modelDisplay = modelInfo 
-                ? `${modelInfo.provider}/${modelInfo.name}`
-                : model;
+            const modelDisplay = getModelDisplayName(model);
             
             let infoText = modelDisplay;
             if (cost) infoText += ` | $${Number(cost).toFixed(5)}`;
@@ -593,10 +601,7 @@ export async function handleChatAI(inputText = null) {
     }
     
     // UI表示用モデル名の取得
-    const modelInfo = window.App.model.available.find(m => m.id === modelToUse);
-    const modelDisplay = modelInfo 
-        ? `[${modelInfo.provider}] ${modelInfo.name}`
-        : (modelToUse || 'Auto');
+    const modelDisplay = getModelDisplayName(modelToUse, 'Auto');
 
     // 5. 処理状態の更新
     updateState('🔄', `AI分析中... (${modelDisplay})`, {
@@ -661,10 +666,7 @@ export async function handleChatAI(inputText = null) {
         }
         
         // ステート更新（完了）
-        const completedModelInfo = window.App.model.available.find(m => m.id === data.model);
-        const completedDisplay = completedModelInfo 
-            ? `[${completedModelInfo.provider}] ${completedModelInfo.name}`
-            : data.model;
+        const completedDisplay = getModelDisplayName(data.model);
         
         updateState('✅', `Completed (${completedDisplay})`, { 
             usage: data.usage,

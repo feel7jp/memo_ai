@@ -1,15 +1,15 @@
 """
 エンドポイント定義 (API Routes)
 
-System系およびNotion参照系エンドポイントを定義します。
-段階的移行: Step 1 - System系（health, config, models）
-            Step 2 - Notion参照系（targets, schema, content×3）
+全APIルート（System系、Notion参照系、AI処理系、Update系）を定義します。
+エラーレスポンスは _build_error_detail() で統一的に構築されます。
 """
 
 from fastapi import APIRouter, HTTPException, Request
 import os
 import asyncio
 import traceback
+import httpx
 
 from api.logger import setup_logger
 from api.config import (
@@ -19,6 +19,7 @@ from api.config import (
     DEFAULT_MULTIMODAL_MODEL,
     NOTION_CONTENT_MAX_LENGTH,
 )
+from api.services import extract_plain_text, get_current_jst_str
 from api.notion import (
     fetch_config_db,
     fetch_children_list,
@@ -38,6 +39,30 @@ from api.schemas import AnalyzeRequest, ChatRequest, SaveRequest
 from api.rate_limiter import rate_limiter
 
 logger = setup_logger(__name__)
+
+
+def _build_error_detail(
+    error_key: str,
+    exception: Exception,
+    fallback_message: str,
+    suggestions: list | None = None,
+) -> dict:
+    """
+    エラーレスポンス用のdetail辞書を構築する。
+
+    DEBUG_MODE有効時は例外の詳細情報を含め、
+    無効時は日本語のフォールバックメッセージを返す。
+    """
+    detail = {"error": error_key}
+    if DEBUG_MODE:
+        detail["message"] = str(exception)
+        detail["type"] = type(exception).__name__
+    else:
+        detail["message"] = fallback_message
+    if suggestions:
+        detail["suggestions"] = suggestions
+    return detail
+
 
 # FastAPI Router
 router = APIRouter()
@@ -325,10 +350,10 @@ async def get_content(page_id: str, request: Request, type: str = "page"):
 
                     if prop_type == "title":
                         title_objs = prop_data.get("title", [])
-                        value = "".join([t.get("plain_text", "") for t in title_objs])
+                        value = extract_plain_text(title_objs)
                     elif prop_type == "rich_text":
                         text_objs = prop_data.get("rich_text", [])
-                        value = "".join([t.get("plain_text", "") for t in text_objs])
+                        value = extract_plain_text(text_objs)
                     elif prop_type == "select":
                         select_obj = prop_data.get("select")
                         value = select_obj.get("name") if select_obj else None
@@ -374,14 +399,14 @@ async def get_content(page_id: str, request: Request, type: str = "page"):
                 if block_type == "paragraph":
                     paragraph = block.get("paragraph", {})
                     text_objs = paragraph.get("rich_text", [])
-                    text = "".join([t.get("plain_text", "") for t in text_objs])
+                    text = extract_plain_text(text_objs)
                     if text.strip():
                         lines.append(text)
 
                 elif block_type in ["heading_1", "heading_2", "heading_3"]:
                     heading = block.get(block_type, {})
                     text_objs = heading.get("rich_text", [])
-                    text = "".join([t.get("plain_text", "") for t in text_objs])
+                    text = extract_plain_text(text_objs)
                     if text.strip():
                         # 見出しレベルに応じてマークダウン記号を追加
                         prefix = "#" * int(block_type[-1])
@@ -390,21 +415,21 @@ async def get_content(page_id: str, request: Request, type: str = "page"):
                 elif block_type == "bulleted_list_item":
                     item = block.get("bulleted_list_item", {})
                     text_objs = item.get("rich_text", [])
-                    text = "".join([t.get("plain_text", "") for t in text_objs])
+                    text = extract_plain_text(text_objs)
                     if text.strip():
                         lines.append(f"• {text}")
 
                 elif block_type == "numbered_list_item":
                     item = block.get("numbered_list_item", {})
                     text_objs = item.get("rich_text", [])
-                    text = "".join([t.get("plain_text", "") for t in text_objs])
+                    text = extract_plain_text(text_objs)
                     if text.strip():
                         lines.append(f"1. {text}")
 
                 elif block_type == "to_do":
                     todo = block.get("to_do", {})
                     text_objs = todo.get("rich_text", [])
-                    text = "".join([t.get("plain_text", "") for t in text_objs])
+                    text = extract_plain_text(text_objs)
                     checked = todo.get("checked", False)
                     checkbox = "[x]" if checked else "[ ]"
                     if text.strip():
@@ -413,14 +438,14 @@ async def get_content(page_id: str, request: Request, type: str = "page"):
                 elif block_type == "quote":
                     quote = block.get("quote", {})
                     text_objs = quote.get("rich_text", [])
-                    text = "".join([t.get("plain_text", "") for t in text_objs])
+                    text = extract_plain_text(text_objs)
                     if text.strip():
                         lines.append(f"> {text}")
 
                 elif block_type == "code":
                     code = block.get("code", {})
                     text_objs = code.get("rich_text", [])
-                    text = "".join([t.get("plain_text", "") for t in text_objs])
+                    text = extract_plain_text(text_objs)
                     language = code.get("language", "")
                     if text.strip():
                         lines.append(f"```{language}\n{text}\n```")
@@ -450,8 +475,6 @@ async def analyze_endpoint(request: Request, analyze_req: AnalyzeRequest):
     ユーザーのテキスト入力からデータベースに登録するための適切なプロパティ値をAIに推定させます。
     """
     from api.ai import analyze_text_with_ai
-    from api.services import get_current_jst_str
-    import httpx
 
     # レート制限チェック
     await rate_limiter.check_rate_limit(request, endpoint="analyze")
@@ -515,17 +538,13 @@ async def analyze_endpoint(request: Request, analyze_req: AnalyzeRequest):
         logger.error("[AI Analysis Error] %s: %s", type(e).__name__, e)
         logger.debug(traceback.format_exc())
 
-        detail = {"error": "AI analysis failed"}
-        if DEBUG_MODE:
-            detail["message"] = str(e)
-            detail["type"] = type(e).__name__
-        else:
-            detail["message"] = "AIの処理中にエラーが発生しました"
-        detail["suggestions"] = [
-            "しばらく待ってから再試行してください",
-            "問題が続く場合は管理者にお問い合わせください",
-        ]
-        raise HTTPException(status_code=500, detail=detail)
+        raise HTTPException(
+            status_code=500,
+            detail=_build_error_detail(
+                "AI analysis failed", e, "AIの処理中にエラーが発生しました",
+                ["しばらく待ってから再試行してください", "問題が続く場合は管理者にお問い合わせください"],
+            ),
+        )
 
 
 @router.post("/api/chat")
@@ -537,8 +556,6 @@ async def chat_endpoint(request: Request, chat_req: ChatRequest):
     画像入力や履歴を踏まえた回答が可能です。
     """
     from api.ai import chat_analyze_text_with_ai
-    from api.services import get_current_jst_str
-    import httpx
 
     await rate_limiter.check_rate_limit(request, endpoint="chat")
 
@@ -602,27 +619,25 @@ async def chat_endpoint(request: Request, chat_req: ChatRequest):
             logger.error("[Chat AI Error] %s: %s", type(ai_error).__name__, ai_error)
             logger.debug(traceback.format_exc())
 
-            detail = {"error": "Chat AI failed"}
-            if DEBUG_MODE:
-                detail["message"] = str(ai_error)
-                detail["type"] = type(ai_error).__name__
-            else:
-                detail["message"] = "チャット処理中にエラーが発生しました"
-            detail["suggestions"] = ["しばらく待ってから再試行してください"]
-            raise HTTPException(status_code=500, detail=detail)
+            raise HTTPException(
+                status_code=500,
+                detail=_build_error_detail(
+                    "Chat AI failed", ai_error, "チャット処理中にエラーが発生しました",
+                    ["しばらく待ってから再試行してください"],
+                ),
+            )
     except HTTPException:
         raise
     except Exception as e:
         logger.error("[Chat Endpoint Error] %s", e)
         logger.debug(traceback.format_exc())
 
-        detail = {"error": "Unexpected error"}
-        if DEBUG_MODE:
-            detail["message"] = str(e)
-            detail["type"] = type(e).__name__
-        else:
-            detail["message"] = "予期しないエラーが発生しました"
-        raise HTTPException(status_code=500, detail=detail)
+        raise HTTPException(
+            status_code=500,
+            detail=_build_error_detail(
+                "Unexpected error", e, "予期しないエラーが発生しました",
+            ),
+        )
 
 
 # --- Update系エンドポイント (Step 4) ---

@@ -219,7 +219,7 @@ memo_ai/
 │   ├── config.py           # .env からの設定読み込み
 │   ├── models.py           # Pydantic リクエスト/レスポンスモデル
 │   ├── schemas.py          # データスキーマ定義
-│   ├── services.py         # ビジネスロジック層
+│   ├── services.py         # ビジネスロジック層（extract_plain_text、サニタイズ、ブロック変換）
 │   ├── model_discovery.py  # AI モデル動的検出
 │   ├── llm_client.py       # LiteLLM ラッパー
 │   ├── rate_limiter.py     # レート制限
@@ -249,8 +249,8 @@ memo_ai/
 │
 ├── .env                    # ローカル秘密情報 (コミット禁止)
 ├── .env.example            # .env のテンプレート
+├── pytest.ini              # pytest設定（テスト検出・マーカー）
 ├── requirements.txt        # Python 依存関係
-├── pyproject.toml          # プロジェクト設定、pytest設定（唯一の設定源）
 └── vercel.json             # Vercel デプロイ設定
 ```
 

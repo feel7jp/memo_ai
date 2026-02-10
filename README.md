@@ -3,6 +3,8 @@
 Notionを記憶媒体として使用する、シンプルでカスタマイズ可能なAIアシスタントです。
 ローカル環境で動作し、あなたの入力をNotionに構造化して保存します。
 
+> **🔄 2026/02/10 コード品質リファクタリング実施** — デッドコード除去、ヘルパー関数抽出、重複ロジック統合、内部関数プライベート化
+>
 > **🔄 2026/02/08 大規模リファクタリング実施** — モジュール分割、サービスレイヤー導入、テスト整備など
 
 ---
@@ -143,7 +145,7 @@ Vercel ダッシュボード → Settings → Environment Variables に以下を
 AIに改造アイデアを提案させることも可能。
 
 ### AIの性格を変える
-`public/js/prompt.js` の `DEFAULT_SYSTEM_PROMPT` を編集します。
+Notion の Config DBでシステムプロンプトを管理できます。Config DB未設定時は `api/config.py` の `DEFAULT_SYSTEM_PROMPT` が使用されます。
 ```javascript
 // 例: 関西弁のAIにする
 const DEFAULT_SYSTEM_PROMPT = `あなたは大阪出身の陽気なアシスタントです。`;
@@ -195,7 +197,7 @@ memo_ai/
 │   ├── model_discovery.py      # 動的モデル発見・キャッシュ
 │   ├── models.py               # AIモデル定義・ホワイトリスト
 │   ├── schemas.py              # Pydantic リクエスト/レスポンス定義
-│   ├── services.py             # ビジネスロジックヘルパー
+│   ├── services.py             # ビジネスロジックヘルパー（plain_text抽出、サニタイズ、ブロック変換）
 │   ├── config.py               # 環境変数・定数の集中管理
 │   ├── rate_limiter.py         # レート制限
 │   └── logger.py               # 構造化ロギング

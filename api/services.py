@@ -7,6 +7,26 @@
 import re
 from datetime import datetime
 
+from api.config import NOTION_BLOCK_CHAR_LIMIT
+
+
+def extract_plain_text(rich_text_items: list) -> str:
+    """
+    Notion API の rich_text / title 配列からプレーンテキストを結合して返す。
+
+    アプリケーション全体で散在していた
+    `"".join([t.get("plain_text", "") for t in items])` パターンの共通化。
+
+    Args:
+        rich_text_items: Notion API の rich_text または title 配列
+
+    Returns:
+        結合されたプレーンテキスト文字列
+    """
+    if not rich_text_items:
+        return ""
+    return "".join(t.get("plain_text", "") for t in rich_text_items)
+
 
 def sanitize_image_data(text: str) -> str:
     """
@@ -40,56 +60,8 @@ def get_current_jst_str() -> str:
     return now.strftime("%Y-%m-%d %H:%M:%S JST")
 
 
-def extract_property_value(prop_data: dict) -> any:
-    """
-    Notionプロパティオブジェクトから表示用の値を抽出
-
-    Notionのプロパティは型により異なる構造を持つため、型に応じて
-    適切な値を取り出します。
-
-    Args:
-        prop_data: Notionプロパティオブジェクト（"type"キーと型別のデータを含む）
-
-    Returns:
-        抽出された値（文字列、リスト、数値、None等）
-    """
-    if not isinstance(prop_data, dict):
-        return None
-
-    p_type = prop_data.get("type")
-
-    if p_type == "title":
-        return "".join(t.get("plain_text", "") for t in prop_data.get("title", []))
-    elif p_type == "rich_text":
-        return "".join(t.get("plain_text", "") for t in prop_data.get("rich_text", []))
-    elif p_type == "select":
-        select_obj = prop_data.get("select")
-        return select_obj.get("name") if select_obj else None
-    elif p_type == "multi_select":
-        options = prop_data.get("multi_select", [])
-        return [o.get("name", "") for o in options]
-    elif p_type == "status":
-        status_obj = prop_data.get("status")
-        return status_obj.get("name") if status_obj else None
-    elif p_type == "date":
-        date_obj = prop_data.get("date")
-        return date_obj.get("start") if date_obj else None
-    elif p_type == "checkbox":
-        return prop_data.get("checkbox")
-    elif p_type == "number":
-        return prop_data.get("number")
-    elif p_type == "url":
-        return prop_data.get("url")
-    elif p_type == "email":
-        return prop_data.get("email")
-    elif p_type == "phone_number":
-        return prop_data.get("phone_number")
-    else:
-        return None
-
-
-def chunk_rich_text_items(
-    items: list, text_key: str = "rich_text", limit: int = 2000
+def _chunk_rich_text_items(
+    items: list, text_key: str = "rich_text", limit: int = NOTION_BLOCK_CHAR_LIMIT
 ) -> list:
     """
     rich_text/title配列の各アイテムを指定文字数で分割
@@ -100,7 +72,7 @@ def chunk_rich_text_items(
     Args:
         items: rich_text/title配列
         text_key: 処理対象のキー（"rich_text" or "title"）
-        limit: 1アイテムあたりの文字数上限（デフォルト2000）
+        limit: 1アイテムあたりの文字数上限（デフォルト NOTION_BLOCK_CHAR_LIMIT）
 
     Returns:
         分割後のアイテム配列
@@ -133,7 +105,7 @@ def _sanitize_rich_text_field(items: list, sanitize_fn) -> list:
     """
     rich_text/title配列のテキストをサニタイズし、文字数制限で分割する。
 
-    既存の chunk_rich_text_items を内部で再利用する実装。
+    既存の _chunk_rich_text_items を内部で再利用する実装。
     sanitize_fn は sanitize_image_data などのテキスト変換関数を想定。
 
     Args:
@@ -149,7 +121,7 @@ def _sanitize_rich_text_field(items: list, sanitize_fn) -> list:
             item["text"]["content"] = sanitize_fn(item["text"]["content"])
 
     # Step 2: 文字数制限による分割（既存関数を再利用）
-    return chunk_rich_text_items(items)
+    return _chunk_rich_text_items(items)
 
 
 def sanitize_notion_properties(properties: dict) -> dict:
@@ -205,15 +177,15 @@ def ensure_title_property(properties: dict, fallback_text: str) -> dict:
     return properties
 
 
-def create_content_blocks(text: str, chunk_size: int = 2000) -> list:
+def create_content_blocks(text: str, chunk_size: int = NOTION_BLOCK_CHAR_LIMIT) -> list:
     """
     テキストをNotionのparagraphブロック配列に変換する。
 
-    Notion APIのブロックサイズ制限(2000文字)に従い自動分割。
+    Notion APIのブロックサイズ制限(NOTION_BLOCK_CHAR_LIMIT)に従い自動分割。
 
     Args:
         text: 変換するテキスト
-        chunk_size: 分割サイズ（デフォルト2000）
+        chunk_size: 分割サイズ（デフォルト NOTION_BLOCK_CHAR_LIMIT）
 
     Returns:
         Notion APIのchildrenブロック配列
