@@ -278,7 +278,7 @@ async def analyze_text_with_ai(
         }
 
     except Exception as e:
-        logger.error("AI Analysis Failed: %s", e)
+        logger.error("AI Analysis Failed: %s", e, exc_info=True)
 
         # エラー時のフォールバック処理
         # AI分析に失敗しても、ユーザーの入力テキストをタイトルとして保存できるように
@@ -363,9 +363,8 @@ async def chat_analyze_text_with_ai(
             }
 
         except Exception as e:
-            logger.error("[Chat AI] Image generation failed: %s", e)
             error_msg = str(e)
-            # RuntimeError("Image generation failed: ...") のラッパー部分を除去
+            # llm_client.pyで "Image generation failed: ..." にラップされるため除去
             if "Image generation failed: " in error_msg:
                 error_msg = error_msg.replace("Image generation failed: ", "")
 
@@ -461,6 +460,7 @@ Restraints:
         json_resp = result["content"]
 
     except Exception as e:
+        # 上位層: llm_client.pyで既にトレースバック出力済みのためメッセージのみログ
         logger.error("[Chat AI] LLM generation failed: %s", e)
         # エラーメッセージをユーザーに返す
         error_msg = str(e)

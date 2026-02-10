@@ -19,6 +19,9 @@ logger = setup_logger(__name__)
 # (ローカル開発では LITELLM_VERBOSE 環境変数で制御可能)
 IS_VERCEL = os.environ.get("VERCEL") == "1"
 litellm.set_verbose = False if IS_VERCEL else LITELLM_VERBOSE
+# Vercel環境: LiteLLM内部loggerのANSIカラーコードを除去（ログ自体は維持）
+from api.logger import configure_third_party_loggers
+configure_third_party_loggers()
 
 # デバッグ用: 直近10件のLLM API通信ログ
 llm_api_log = deque(maxlen=10)
@@ -223,8 +226,8 @@ async def generate_json(prompt: Any, model: str, retries: int = None) -> Dict[st
 
         except Exception as e:
             if attempt == retries:
-                # 最大リトライ回数に達した場合はエラーを再送出
-                logger.error("Generation failed after %d retries: %s", retries, e)
+                # 最大リトライ回数に達した場合 - 最下層なのでexc_info=Trueでフルトレースバック出力
+                logger.error("Generation failed after %d retries: %s", retries, e, exc_info=True)
                 # ログ記録（エラー時）
                 _record_llm_log(
                     model,
@@ -343,18 +346,12 @@ async def generate_image_response(prompt: str, model: str) -> Dict[str, Any]:
                 message_text = "画像を生成しました"
 
             if not image_base64:
-                # デバッグ用: レスポンス構造をログに出力
-                logger.error(
-                    "[Image Gen] No image in response: content=%s, has_images=%s",
-                    message.content,
-                    hasattr(message, "images"),
-                )
-                if hasattr(message, "images"):
-                    logger.error("[Image Gen] Images array: %s", message.images)
-                # AIのテキスト応答を保持してエラーを生成（デバッグ用）
-                error = RuntimeError("Geminiが画像を生成できませんでした")
-                error.ai_response_text = message_text[:300] if message_text else None
-                raise error
+                # API成功だが画像なし → エラーメッセージにAI応答要約を含めて原因を明示
+                if message_text:
+                    truncated = (message_text[:100] + "...") if len(message_text) > 100 else message_text
+                    raise RuntimeError(f"AIが画像ではなくテキストで応答しました:\n{truncated}")
+                else:
+                    raise RuntimeError("AIから画像データが返されませんでした")
 
         else:
             # 汎用パス: OpenAI DALL-E等
@@ -441,7 +438,8 @@ async def generate_image_response(prompt: str, model: str) -> Dict[str, Any]:
 
     except Exception as e:
         duration = time.time() - start_time
-        logger.error("[Image Gen] Failed: %s", e)
+        # 最下層キャッチ: exc_info=Trueでフルトレースバック出力（上位層では省略）
+        logger.error("[Image Gen] API error: %s", e, exc_info=True)
 
         _record_llm_log(
             model=model,

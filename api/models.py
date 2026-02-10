@@ -110,7 +110,7 @@ def _build_model_registry() -> List[Dict[str, Any]]:
             _PROVIDER_ERRORS["gemini"] = "No models returned from API"
 
     except ImportError as e:
-        logger.error("❌ CRITICAL: google-genai package not installed: %s", e)
+        logger.error("❌ CRITICAL: google-genai package not installed: %s", e, exc_info=True)
         logger.error("⚠️  Install with: pip install -U google-genai")
         logger.error("⚠️  Or run: pip install -r requirements.txt")
         gemini_loaded_dynamically = False

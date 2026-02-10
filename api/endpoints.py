@@ -8,7 +8,7 @@
 from fastapi import APIRouter, HTTPException, Request
 import os
 import asyncio
-import traceback
+
 import httpx
 
 from api.logger import setup_logger
@@ -455,8 +455,8 @@ async def get_content(page_id: str, request: Request, type: str = "page"):
             return {"content": content_text}
 
     except Exception as e:
-        logger.error("[Content Error] %s: %s", type(e).__name__, e)
-        logger.debug(traceback.format_exc())
+        logger.error("[Content Error] %s: %s", type(e).__name__, e, exc_info=True)
+
 
         # エラー時は空のコンテンツを返して処理を続行
         # （参照コンテキストがなくてもチャットは機能すべき）
@@ -536,7 +536,7 @@ async def analyze_endpoint(request: Request, analyze_req: AnalyzeRequest):
         )
     except Exception as e:
         logger.error("[AI Analysis Error] %s: %s", type(e).__name__, e)
-        logger.debug(traceback.format_exc())
+
 
         raise HTTPException(
             status_code=500,
@@ -617,7 +617,7 @@ async def chat_endpoint(request: Request, chat_req: ChatRequest):
             )
         except Exception as ai_error:
             logger.error("[Chat AI Error] %s: %s", type(ai_error).__name__, ai_error)
-            logger.debug(traceback.format_exc())
+    
 
             raise HTTPException(
                 status_code=500,
@@ -630,7 +630,7 @@ async def chat_endpoint(request: Request, chat_req: ChatRequest):
         raise
     except Exception as e:
         logger.error("[Chat Endpoint Error] %s", e)
-        logger.debug(traceback.format_exc())
+
 
         raise HTTPException(
             status_code=500,
@@ -686,7 +686,7 @@ async def save_endpoint(save_req: SaveRequest):
             url = await create_page(save_req.target_db_id, props, children)
             return {"status": "success", "url": url}
     except Exception as e:
-        logger.error("[Save Error] %s", e)
+        logger.error("[Save Error] %s", e, exc_info=True)
         raise HTTPException(
             status_code=500, detail=f"Failed to save to Notion: {str(e)}"
         )
@@ -736,8 +736,8 @@ async def update_page(page_id: str, request: Request):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("[Update Page Error] %s", e)
-        logger.debug(traceback.format_exc())
+        logger.error("[Update Page Error] %s", e, exc_info=True)
+
         raise HTTPException(status_code=500, detail=f"ページ更新エラー: {str(e)}")
 
 
@@ -779,8 +779,8 @@ async def create_page_endpoint(request: dict):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("[Create Page Error] %s", e)
-        logger.debug(traceback.format_exc())
+        logger.error("[Create Page Error] %s", e, exc_info=True)
+
         raise HTTPException(
             status_code=500, detail=f"ページ作成に失敗しました: {str(e)}"
         )
