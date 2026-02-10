@@ -139,3 +139,173 @@ class TestGenerateImageResponse:
 
         assert result["message"] == "画像を生成しました"
         assert result["image_base64"] == "abc123"
+
+    @pytest.mark.asyncio
+    async def test_gemini_text_only_response_raises_with_gemini_text(self):
+        """
+        Geminiがテキストのみ返し画像なし → RuntimeErrorにgemini_text属性が付与されること。
+        実際のケース: 長文プロンプトでGeminiが画像生成せずテキストで応答。
+        """
+        from api.llm_client import generate_image_response
+
+        mock_message = MagicMock()
+        mock_message.content = "申し訳ありませんが、その内容の画像は生成できません。"
+        mock_message.images = []  # 画像なし
+
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message = mock_message
+        mock_response.usage = MagicMock()
+        mock_response.usage.model_dump.return_value = {
+            "completion_tokens": 30, "prompt_tokens": 100, "total_tokens": 130,
+        }
+
+        with patch("litellm.acompletion", new_callable=AsyncMock) as mock_ac:
+            mock_ac.return_value = mock_response
+            with patch("litellm.completion_cost", return_value=0.0):
+                with pytest.raises(RuntimeError) as exc_info:
+                    await generate_image_response(
+                        "長い要約テキスト...", "gemini/gemini-2.5-flash-image"
+                    )
+
+        # 外側のexceptで "Image generation failed: ..." にラップされる
+        assert "Image generation failed" in str(exc_info.value)
+        # gemini_text属性が転送されていること
+        assert hasattr(exc_info.value, "gemini_text")
+        assert "画像は生成できません" in exc_info.value.gemini_text
+
+    @pytest.mark.asyncio
+    async def test_gemini_no_text_no_image_raises(self):
+        """Geminiがテキストも画像も返さない場合 → gemini_text=Noneのエラー"""
+        from api.llm_client import generate_image_response
+
+        mock_message = MagicMock()
+        mock_message.content = None
+        mock_message.images = None
+
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message = mock_message
+        mock_response.usage = MagicMock()
+        mock_response.usage.model_dump.return_value = {
+            "completion_tokens": 0, "prompt_tokens": 10, "total_tokens": 10,
+        }
+
+        with patch("litellm.acompletion", new_callable=AsyncMock) as mock_ac:
+            mock_ac.return_value = mock_response
+            with patch("litellm.completion_cost", return_value=0.0):
+                with pytest.raises(RuntimeError) as exc_info:
+                    await generate_image_response(
+                        "test", "gemini/gemini-2.5-flash-image"
+                    )
+
+        assert hasattr(exc_info.value, "gemini_text")
+        assert exc_info.value.gemini_text is None
+
+    @pytest.mark.asyncio
+    async def test_openai_empty_response_raises(self):
+        """OpenAI DALL-Eが空のレスポンスを返す場合 → RuntimeError"""
+        from api.llm_client import generate_image_response
+
+        mock_response = MagicMock()
+        mock_response.data = []  # 空の画像データ
+
+        with patch("litellm.aimage_generation", new_callable=AsyncMock) as mock_ig:
+            mock_ig.return_value = mock_response
+            with pytest.raises(RuntimeError) as exc_info:
+                await generate_image_response(
+                    "a cute cat", "openai/dall-e-3"
+                )
+
+        assert "Image generation failed" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_openai_content_policy_violation_raises(self):
+        """OpenAI DALL-Eのコンテンツポリシー違反 → RuntimeError"""
+        from api.llm_client import generate_image_response
+        from openai import BadRequestError
+
+        policy_error = BadRequestError(
+            message="Your request was rejected due to content policy violation",
+            response=MagicMock(status_code=400),
+            body={"error": {"code": "content_policy_violation"}},
+        )
+
+        with patch("litellm.aimage_generation", new_callable=AsyncMock) as mock_ig:
+            mock_ig.side_effect = policy_error
+            with pytest.raises(RuntimeError) as exc_info:
+                await generate_image_response(
+                    "inappropriate content", "openai/dall-e-3"
+                )
+
+        assert "Image generation failed" in str(exc_info.value)
+        assert "content policy" in str(exc_info.value).lower() or "rejected" in str(exc_info.value).lower()
+
+
+class TestImageGenFailureInChatAI:
+    """chat_analyze_text_with_ai 経由の画像生成失敗テスト"""
+
+    @pytest.mark.asyncio
+    async def test_image_gen_failure_returns_flag_and_message(self):
+        """画像生成失敗時に _image_gen_failed=True と日本語メッセージを返すこと"""
+        from api.ai import chat_analyze_text_with_ai
+
+        error = RuntimeError("Image generation failed: Geminiが画像を生成できませんでした")
+        error.gemini_text = "テスト用のGemini応答テキスト"
+
+        with patch("api.llm_client.generate_image_response", new_callable=AsyncMock) as mock_gen:
+            mock_gen.side_effect = error
+            result = await chat_analyze_text_with_ai(
+                text="猫の絵を描いて",
+                schema={"title": {"type": "title"}},
+                system_prompt="test",
+                image_generation=True,
+            )
+
+        assert result["_image_gen_failed"] is True
+        assert "画像は生成されませんでした" in result["message"]
+        assert result["image_base64"] is None
+
+    @pytest.mark.asyncio
+    async def test_image_gen_failure_debug_mode_includes_gemini_response(self):
+        """DEBUG_MODE時に _debug_gemini_response が含まれること"""
+        from api.ai import chat_analyze_text_with_ai
+
+        error = RuntimeError("Geminiが画像を生成できませんでした")
+        error.gemini_text = "Geminiからの応答テキスト"
+
+        with patch("api.llm_client.generate_image_response", new_callable=AsyncMock) as mock_gen:
+            mock_gen.side_effect = error
+            with patch("api.ai.DEBUG_MODE", True):
+                result = await chat_analyze_text_with_ai(
+                    text="犬の絵を描いて",
+                    schema={"title": {"type": "title"}},
+                    system_prompt="test",
+                    image_generation=True,
+                )
+
+        assert result["_image_gen_failed"] is True
+        assert result.get("_debug_gemini_response") == "Geminiからの応答テキスト"
+
+    @pytest.mark.asyncio
+    async def test_image_gen_failure_non_debug_mode_hides_gemini_response(self):
+        """非DEBUG_MODE時に _debug_gemini_response が含まれないこと（セキュリティ）"""
+        from api.ai import chat_analyze_text_with_ai
+
+        error = RuntimeError("Geminiが画像を生成できませんでした")
+        error.gemini_text = "秘密の応答テキスト"
+
+        with patch("api.llm_client.generate_image_response", new_callable=AsyncMock) as mock_gen:
+            mock_gen.side_effect = error
+            with patch("api.ai.DEBUG_MODE", False):
+                result = await chat_analyze_text_with_ai(
+                    text="絵を描いて",
+                    schema={"title": {"type": "title"}},
+                    system_prompt="test",
+                    image_generation=True,
+                )
+
+        assert result["_image_gen_failed"] is True
+        assert "_debug_gemini_response" not in result
+
+

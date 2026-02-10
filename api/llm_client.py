@@ -345,13 +345,16 @@ async def generate_image_response(prompt: str, model: str) -> Dict[str, Any]:
             if not image_base64:
                 # デバッグ用: レスポンス構造をログに出力
                 logger.error(
-                    "[Image Gen] Response message: content=%s, has_images=%s",
+                    "[Image Gen] No image in response: content=%s, has_images=%s",
                     message.content,
                     hasattr(message, "images"),
                 )
                 if hasattr(message, "images"):
                     logger.error("[Image Gen] Images array: %s", message.images)
-                raise RuntimeError("No image data found in Gemini response")
+                # Geminiのテキスト応答を保持してエラーを生成
+                error = RuntimeError("Geminiが画像を生成できませんでした")
+                error.gemini_text = message_text[:300] if message_text else None
+                raise error
 
         else:
             # 汎用パス: OpenAI DALL-E等
@@ -441,4 +444,8 @@ async def generate_image_response(prompt: str, model: str) -> Dict[str, Any]:
             error=str(e),
         )
 
-        raise RuntimeError(f"Image generation failed: {str(e)}")
+        new_error = RuntimeError(f"Image generation failed: {str(e)}")
+        # gemini_text属性を転送（上位のai.pyがデバッグ情報として利用）
+        if hasattr(e, "gemini_text"):
+            new_error.gemini_text = e.gemini_text
+        raise new_error from e
