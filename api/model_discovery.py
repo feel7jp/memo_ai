@@ -171,12 +171,12 @@ def get_gemini_models() -> List[Dict[str, Any]]:
         return models
 
     except ImportError as e:
-        logger.error("❌ CRITICAL: google-genai package not installed: %s", e)
+        logger.error("❌ CRITICAL: google-genai package not installed: %s", e, exc_info=True)
         logger.error("⚠️  Install with: pip install -U google-genai")
         logger.error("⚠️  Or run: pip install -r requirements.txt")
         return []
     except Exception as e:
-        logger.error("Failed to fetch Gemini models: %s: %s", type(e).__name__, e)
+        logger.error("Failed to fetch Gemini models: %s: %s", type(e).__name__, e, exc_info=True)
         return []
 
 

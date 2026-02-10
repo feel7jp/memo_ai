@@ -171,8 +171,10 @@ class TestGenerateImageResponse:
         # 外側のexceptで "Image generation failed: ..." にラップされる
         assert "Image generation failed" in str(exc_info.value)
         # ai_response_text属性は__cause__（元のエラー）に保持される
-        assert hasattr(exc_info.value.__cause__, "ai_response_text")
-        assert "画像は生成できません" in exc_info.value.__cause__.ai_response_text
+        assert hasattr(exc_info.value.__cause__, "ai_response_text") is False
+        # エラーメッセージにAIの応答テキスト要約が含まれる
+        assert "AIが画像ではなくテキストで応答しました" in str(exc_info.value)
+        assert "画像は生成できません" in str(exc_info.value)
 
     @pytest.mark.asyncio
     async def test_gemini_no_text_no_image_raises(self):
@@ -199,8 +201,8 @@ class TestGenerateImageResponse:
                         "test", "gemini/gemini-2.5-flash-image"
                     )
 
-        assert hasattr(exc_info.value.__cause__, "ai_response_text")
-        assert exc_info.value.__cause__.ai_response_text is None
+        # テキストも画像もない場合のエラーメッセージ
+        assert "AIから画像データが返されませんでした" in str(exc_info.value)
 
     @pytest.mark.asyncio
     async def test_openai_empty_response_raises(self):
@@ -250,8 +252,8 @@ class TestImageGenFailureInChatAI:
         """画像生成失敗時に _image_gen_failed=True と日本語メッセージを返すこと"""
         from api.ai import chat_analyze_text_with_ai
 
-        error = RuntimeError("Image generation failed: Geminiが画像を生成できませんでした")
-        error.ai_response_text = "テスト用のGemini応答テキスト"
+        error = RuntimeError("Image generation failed: AIが画像ではなくテキストで応答しました")
+ 
 
         with patch("api.llm_client.generate_image_response", new_callable=AsyncMock) as mock_gen:
             mock_gen.side_effect = error

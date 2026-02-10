@@ -176,11 +176,8 @@ async def safe_api_call(
         except Exception as e:
             error_msg = f"{type(e).__name__}: {str(e)}"
             logger.error(
-                "Unexpected error on %s: %s - %s", endpoint, type(e).__name__, e
+                "Unexpected error on %s: %s - %s", endpoint, type(e).__name__, e, exc_info=True
             )
-            import traceback
-
-            logger.debug(traceback.format_exc())
             _record_notion_log(
                 method,
                 endpoint,

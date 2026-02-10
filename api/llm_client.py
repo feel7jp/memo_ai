@@ -224,7 +224,7 @@ async def generate_json(prompt: Any, model: str, retries: int = None) -> Dict[st
         except Exception as e:
             if attempt == retries:
                 # 最大リトライ回数に達した場合はエラーを再送出
-                logger.error("Generation failed after %d retries: %s", retries, e)
+                logger.error("Generation failed after %d retries: %s", retries, e, exc_info=True)
                 # ログ記録（エラー時）
                 _record_llm_log(
                     model,
@@ -343,18 +343,17 @@ async def generate_image_response(prompt: str, model: str) -> Dict[str, Any]:
                 message_text = "画像を生成しました"
 
             if not image_base64:
-                # デバッグ用: レスポンス構造をログに出力
-                logger.error(
-                    "[Image Gen] No image in response: content=%s, has_images=%s",
-                    message.content,
-                    hasattr(message, "images"),
-                )
-                if hasattr(message, "images"):
-                    logger.error("[Image Gen] Images array: %s", message.images)
-                # AIのテキスト応答を保持してエラーを生成（デバッグ用）
-                error = RuntimeError("Geminiが画像を生成できませんでした")
-                error.ai_response_text = message_text[:300] if message_text else None
-                raise error
+                # エラーメッセージにAIの応答要約を含める（ユーザーが原因を把握可能に）
+                if message_text:
+                    truncated = (message_text[:100] + "...") if len(message_text) > 100 else message_text
+                    logger.warning(
+                        "[Image Gen] 画像なし - AIがテキストで応答: \"%s\"",
+                        truncated,
+                    )
+                    raise RuntimeError(f"AIが画像ではなくテキストで応答しました:\n{truncated}")
+                else:
+                    logger.warning("[Image Gen] 画像なし - AIからテキストも画像も返されませんでした")
+                    raise RuntimeError("AIから画像データが返されませんでした")
 
         else:
             # 汎用パス: OpenAI DALL-E等
@@ -431,7 +430,7 @@ async def generate_image_response(prompt: str, model: str) -> Dict[str, Any]:
 
     except Exception as e:
         duration = time.time() - start_time
-        logger.error("[Image Gen] Failed: %s", e)
+        logger.error("[Image Gen] API error: %s", e, exc_info=True)
 
         _record_llm_log(
             model=model,
