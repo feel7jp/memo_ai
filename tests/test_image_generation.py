@@ -27,7 +27,19 @@ class TestGenerateImageResponse:
         mock_response.choices = [MagicMock()]
         mock_response.choices[0].message = mock_message
         mock_response.usage = MagicMock()
-        mock_response.usage.model_dump.return_value = {"total_tokens": 100}
+        mock_response.usage.model_dump.return_value = {
+            "completion_tokens": 1315,
+            "prompt_tokens": 15,
+            "total_tokens": 1330,
+            "completion_tokens_details": {
+                "text_tokens": 25,
+                "image_tokens": 1290,
+            },
+            "prompt_tokens_details": {
+                "text_tokens": 15,
+                "image_tokens": None,
+            },
+        }
 
         # NOTE: generate_image_response does `from litellm import acompletion` locally,
         # so we must mock `litellm.acompletion`, not `api.llm_client.acompletion`
@@ -61,7 +73,19 @@ class TestGenerateImageResponse:
         mock_response.choices = [MagicMock()]
         mock_response.choices[0].message = mock_message
         mock_response.usage = MagicMock()
-        mock_response.usage.model_dump.return_value = {"total_tokens": 100}
+        mock_response.usage.model_dump.return_value = {
+            "completion_tokens": 1315,
+            "prompt_tokens": 15,
+            "total_tokens": 1330,
+            "completion_tokens_details": {
+                "text_tokens": 25,
+                "image_tokens": 1290,
+            },
+            "prompt_tokens_details": {
+                "text_tokens": 15,
+                "image_tokens": None,
+            },
+        }
 
         with patch("litellm.acompletion", new_callable=AsyncMock) as mock_ac:
             mock_ac.return_value = mock_response
@@ -92,7 +116,19 @@ class TestGenerateImageResponse:
         mock_response.choices = [MagicMock()]
         mock_response.choices[0].message = mock_message
         mock_response.usage = MagicMock()
-        mock_response.usage.model_dump.return_value = {"total_tokens": 50}
+        mock_response.usage.model_dump.return_value = {
+            "completion_tokens": 800,
+            "prompt_tokens": 10,
+            "total_tokens": 810,
+            "completion_tokens_details": {
+                "text_tokens": 0,
+                "image_tokens": 800,
+            },
+            "prompt_tokens_details": {
+                "text_tokens": 10,
+                "image_tokens": None,
+            },
+        }
 
         with patch("litellm.acompletion", new_callable=AsyncMock) as mock_ac:
             mock_ac.return_value = mock_response

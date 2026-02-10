@@ -503,18 +503,31 @@ Restraints:
             "[Chat AI] JSON decode failed, attempting recovery from: %s",
             json_resp[:200],
         )
-        try:
-            # 部分的なJSONの抽出によるリカバリ
-            start = json_resp.find("{")
-            end = json_resp.rfind("}") + 1
-            data = json.loads(json_resp[start:end])
-            logger.info("[Chat AI] Recovered data: %s", data)
-        except Exception as e:
-            logger.error("[Chat AI] Recovery failed: %s", e)
-            data = {
-                "message": "AIの応答を解析できませんでした。",
-                "raw_response": json_resp,
-            }
+        data = None
+
+        # リカバリ1: 余計な接頭辞/接尾辞がある場合に {} の間を抽出して再試行
+        start = json_resp.find("{")
+        end = json_resp.rfind("}") + 1
+        if start != -1 and end > start:
+            try:
+                data = json.loads(json_resp[start:end])
+                logger.info("[Chat AI] Recovered via brace extraction: %s", data)
+                data["_json_recovered"] = True
+            except Exception:
+                pass
+
+        # リカバリ2: 中括弧なしのJSON断片（例: "message": "..."）を {} で囲んで再試行
+        if data is None:
+            try:
+                data = json.loads("{" + json_resp.strip() + "}")
+                logger.info("[Chat AI] Recovered via brace wrapping: %s", data)
+                data["_json_recovered"] = True
+            except Exception as e:
+                logger.error("[Chat AI] All recovery attempts failed: %s", e)
+                data = {
+                    "message": "AIの応答を解析できませんでした。",
+                    "raw_response": json_resp,
+                }
 
     # フロントエンド向けのメッセージフィールド保証
     if "message" not in data or not data["message"]:
