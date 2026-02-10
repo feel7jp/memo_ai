@@ -6,6 +6,8 @@ from datetime import datetime
 from collections import deque
 from typing import Dict, List, Optional, Any
 from api.logger import setup_logger
+from api.config import NOTION_BLOCK_CHAR_LIMIT
+from api.services import extract_plain_text
 
 logger = setup_logger(__name__)
 
@@ -221,13 +223,14 @@ async def fetch_config_db(config_db_id: str) -> List[Dict[str, str]]:
 
             # プロパティ値の抽出ヘルパー（型安全にテキストを取得）
             def get_text(p):
+                """プロパティからテキスト抽出"""
                 if not p:
                     return ""
                 t_type = p.get("type")
-                if t_type == "title" and p.get("title"):
-                    return p["title"][0].get("plain_text", "")
-                if t_type == "rich_text" and p.get("rich_text"):
-                    return p["rich_text"][0].get("plain_text", "")
+                if t_type == "title":
+                    return extract_plain_text(p.get("title", []))
+                if t_type == "rich_text":
+                    return extract_plain_text(p.get("rich_text", []))
                 return ""
 
             name = get_text(props.get("Name"))
@@ -331,12 +334,12 @@ async def append_block(page_id: str, content: str) -> bool:
     """
     ページ末尾へのテキストブロック追加
 
-    長文（2000文字以上）に対応しており、自動的に適切なサイズに分割してNotionに送信します。
+    長文（NOTION_BLOCK_CHAR_LIMIT文字以上）に対応しており、自動的に適切なサイズに分割してNotionに送信します。
     """
-    MAX_CHARS = 2000
+    MAX_CHARS = NOTION_BLOCK_CHAR_LIMIT
 
     # コンテンツの分割（Chunking）
-    # Pythonのスライス機能を使って2000文字ごとのリストを作成
+    # Pythonのスライス機能を使ってMAX_CHARS文字ごとのリストを作成
     chunks = [content[i : i + MAX_CHARS] for i in range(0, len(content), MAX_CHARS)]
 
     children = []

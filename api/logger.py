@@ -41,4 +41,5 @@ def setup_logger(name: str) -> logging.Logger:
     handler.setFormatter(formatter)
 
     logger.addHandler(handler)
+    logger.propagate = False  # ルートロガーへの伝播を防止（重複出力防止）
     return logger

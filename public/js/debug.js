@@ -2,6 +2,19 @@
 // デバッグモーダルとAPI記録機能
 
 /**
+ * バックエンドログ（Notion + LLM）を統合してタイムスタンプ降順にソート
+ * @param {Object} backendLogs - { notion: [...], llm: [...] }
+ * @returns {Array} 統合・ソート済みログ配列
+ */
+function _mergeAndSortLogs(backendLogs) {
+    const notionLogs = (backendLogs.notion || []).map(e => ({...e, _type: 'notion'}));
+    const llmLogs = (backendLogs.llm || []).map(e => ({...e, _type: 'llm'}));
+    return [...notionLogs, ...llmLogs].sort((a, b) => 
+        (b.timestamp || '').localeCompare(a.timestamp || '')
+    );
+}
+
+/**
  * デバッグログヘルパー
  */
 export function debugLog(...args) {
@@ -86,11 +99,7 @@ function renderDebugInfo(data) {
         window.App.debug.lastBackendLogs = data.backend_logs;
         
         // Notion と LLM のログを統合し、タイムスタンプ降順でソート
-        const notionLogs = (data.backend_logs.notion || []).map(e => ({...e, _type: 'notion'}));
-        const llmLogs = (data.backend_logs.llm || []).map(e => ({...e, _type: 'llm'}));
-        const allLogs = [...notionLogs, ...llmLogs].sort((a, b) => 
-            (b.timestamp || '').localeCompare(a.timestamp || '')
-        );
+        const allLogs = _mergeAndSortLogs(data.backend_logs);
 
         // ログデータを保存（コピー機能用）
         window.App.debug.lastAllLogs = allLogs;
@@ -354,11 +363,7 @@ export function recordApiCall(endpoint, method, request, response, error = null,
 export async function copyApiHistory() {
     // ログを統合してソート（表示順に合わせる）
     const backendLogs = window.App.debug.lastBackendLogs || {};
-    const notionLogs = (backendLogs.notion || []).map(e => ({...e, _type: 'notion'}));
-    const llmLogs = (backendLogs.llm || []).map(e => ({...e, _type: 'llm'}));
-    const allLogs = [...notionLogs, ...llmLogs].sort((a, b) => 
-        (b.timestamp || '').localeCompare(a.timestamp || '')
-    );
+    const allLogs = _mergeAndSortLogs(backendLogs);
 
     const debugData = {
         memo_ai_debug: {

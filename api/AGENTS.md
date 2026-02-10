@@ -15,8 +15,8 @@
 
 ### Code Quality
 - **デッドコード削除**: 関数の使用箇所を `grep_search` で全ファイル検索→0件なら削除。テスト専用関数は本番コードに不要
-- **DRY原則**: 同一ロジックが3回以上出現→ヘルパー関数に抽出（例: `_format_schema_for_prompt()`, `extract_property_value()`）
-- **ヘルパー関数命名**: 内部用は`_`接頭辞（例: `_format_schema_for_prompt()`）、外部公開は通常命名
+- **DRY原則**: 同一ロジックが3回以上出現→ヘルパー関数に抽出（例: `extract_plain_text()`, `_build_error_detail()`）
+- **ヘルパー関数命名**: 内部用は`_`接頭辞（例: `_chunk_rich_text_items()`, `_get_api_key_for_provider()`）、外部公開は通常命名
 - **関数の責務**: 1関数50行超→責務を分割検討。重複コードは即座にヘルパー化
 
 ### Don't
@@ -46,6 +46,8 @@
 | `test_model_discovery.py` | モデル検出・キャッシュ |
 | `test_html_js_consistency.py` | HTML/JSセレクター整合性 |
 | `test_api_contract.py` | JS↔Backend API契約整合性 |
+| `test_extract_plain_text.py` | `extract_plain_text()` 単体テスト |
+| `test_image_gen_fix.py` | 画像生成修正の検証テスト |
 
 ### モックパス規則（重要）
 エンドポイントを別モジュールに移行した場合、テストのモックパスも更新が必要:

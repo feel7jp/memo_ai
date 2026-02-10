@@ -11,6 +11,7 @@ from typing import Dict, Any, List, Optional
 
 from api.llm_client import generate_json, prepare_multimodal_prompt
 from api.models import select_model_for_input
+from api.services import extract_plain_text
 from api.logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -74,11 +75,9 @@ def construct_prompt(
                 p_type = v.get("type")
                 val = "N/A"
                 if p_type == "title":
-                    val = "".join([t.get("plain_text", "") for t in v.get("title", [])])
+                    val = extract_plain_text(v.get("title", []))
                 elif p_type == "rich_text":
-                    val = "".join(
-                        [t.get("plain_text", "") for t in v.get("rich_text", [])]
-                    )
+                    val = extract_plain_text(v.get("rich_text", []))
                 elif p_type == "select":
                     val = v.get("select", {}).get("name") if v.get("select") else None
                 elif p_type == "multi_select":
@@ -204,13 +203,13 @@ def validate_and_fix_json(json_str: str, schema: Dict[str, Any]) -> Dict[str, An
         elif target_type == "title":
             # Title型: Rich Text オブジェクト構造
             if isinstance(v, list):
-                v = "".join([t.get("plain_text", "") for t in v if "plain_text" in t])
+                v = extract_plain_text(v)
             validated[k] = {"title": [{"text": {"content": str(v)}}]}
 
         elif target_type == "rich_text":
             # Rich Text型
             if isinstance(v, list):
-                v = "".join([t.get("plain_text", "") for t in v if "plain_text" in t])
+                v = extract_plain_text(v)
             validated[k] = {"rich_text": [{"text": {"content": str(v)}}]}
 
         elif target_type == "people":
@@ -365,13 +364,19 @@ async def chat_analyze_text_with_ai(
 
         except Exception as e:
             logger.error("[Chat AI] Image generation failed: %s", e)
+            error_msg = str(e)
+            # RuntimeError("Image generation failed: ...") のラッパー部分を除去
+            if "Image generation failed: " in error_msg:
+                error_msg = error_msg.replace("Image generation failed: ", "")
+
             return {
-                "message": f"画像生成中にエラーが発生しました: {str(e)}",
+                "message": f"⚠️ 画像は生成されませんでした\n{error_msg}",
                 "image_base64": None,
                 "properties": None,
                 "usage": {},
                 "cost": 0.0,
                 "model": selected_model,
+                "_image_gen_failed": True,
                 "model_selection": {
                     "requested": requested_model,
                     "used": selected_model,
@@ -504,18 +509,31 @@ Restraints:
             "[Chat AI] JSON decode failed, attempting recovery from: %s",
             json_resp[:200],
         )
-        try:
-            # 部分的なJSONの抽出によるリカバリ
-            start = json_resp.find("{")
-            end = json_resp.rfind("}") + 1
-            data = json.loads(json_resp[start:end])
-            logger.info("[Chat AI] Recovered data: %s", data)
-        except Exception as e:
-            logger.error("[Chat AI] Recovery failed: %s", e)
-            data = {
-                "message": "AIの応答を解析できませんでした。",
-                "raw_response": json_resp,
-            }
+        data = None
+
+        # リカバリ1: 余計な接頭辞/接尾辞がある場合に {} の間を抽出して再試行
+        start = json_resp.find("{")
+        end = json_resp.rfind("}") + 1
+        if start != -1 and end > start:
+            try:
+                data = json.loads(json_resp[start:end])
+                logger.info("[Chat AI] Recovered via brace extraction: %s", data)
+                data["_json_recovered"] = True
+            except Exception:
+                pass
+
+        # リカバリ2: 中括弧なしのJSON断片（例: "message": "..."）を {} で囲んで再試行
+        if data is None:
+            try:
+                data = json.loads("{" + json_resp.strip() + "}")
+                logger.info("[Chat AI] Recovered via brace wrapping: %s", data)
+                data["_json_recovered"] = True
+            except Exception as e:
+                logger.error("[Chat AI] All recovery attempts failed: %s", e)
+                data = {
+                    "message": "AIの応答を解析できませんでした。",
+                    "raw_response": json_resp,
+                }
 
     # フロントエンド向けのメッセージフィールド保証
     if "message" not in data or not data["message"]:
