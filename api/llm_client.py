@@ -82,11 +82,30 @@ def _record_llm_log(model, messages, content, usage, cost, duration, attempt, er
         }
     )
 
-
 async def generate_json(prompt: Any, model: str, retries: int = None) -> Dict[str, Any]:
+
     """
     LiteLLMを呼び出してJSONレスポンスを生成します。
     リトライロジックとコスト計算が含まれています。
+# ===== 強制Bridgeテスト =====
+text = await ask_dify_bridge(prompt)
+return {
+    "content": text,
+    "usage": {},
+    "cost": 0.0,
+    "model": "bridge",
+}
+# ===========================
+
+     # Bridge講座Botルート
+    #if model == "bridge":
+    #    text = await ask_dify_bridge(prompt)
+     #   return {
+       #     "content": text,
+        #"usage": {},
+         #   "cost": 0.0,
+          #  "model": "bridge",
+        #}
 
     Args:
         prompt: 以下のいずれかの形式:
@@ -453,3 +472,35 @@ async def generate_image_response(prompt: str, model: str) -> Dict[str, Any]:
         )
 
         raise RuntimeError(f"Image generation failed: {str(e)}") from e
+##################################################
+import os
+import asyncio
+import requests
+
+
+DIFY_API_KEY = os.getenv("DIFY_API_KEY")
+DIFY_API_URL = os.getenv("DIFY_API_URL", "https://api.dify.ai/v1/chat-messages")
+
+
+async def ask_dify_bridge(query: str) -> str:
+    """Bridge講座Bot(Dify)へ問い合わせ"""
+    headers = {
+        "Authorization": f"Bearer {DIFY_API_KEY}",
+        "Content-Type": "application/json",
+    }
+
+    payload = {
+        "inputs": {},
+        "query": query,
+        "response_mode": "blocking",
+        "conversation_id": "",
+        "user": "memo-ai-user",
+    }
+
+    loop = asyncio.get_event_loop()
+    response = await loop.run_in_executor(
+        None, lambda: requests.post(DIFY_API_URL, headers=headers, json=payload)
+    )
+
+    response.raise_for_status()
+    return response.json()["answer"]
