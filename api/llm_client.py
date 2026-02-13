@@ -453,3 +453,4 @@ async def generate_image_response(prompt: str, model: str) -> Dict[str, Any]:
         )
 
         raise RuntimeError(f"Image generation failed: {str(e)}") from e
+  
