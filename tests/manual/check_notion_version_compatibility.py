@@ -1,7 +1,6 @@
 import asyncio
 import os
 import httpx
-import json
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -107,9 +106,7 @@ async def main():
 
     # 4. Check Valid Versions (Trick)
     print("\n--- Checking Valid Versions ---")
-    status, data = await call_notion(
-        "GET", f"users/me", "2099-01-01"
-    )  # Invalid version
+    status, data = await call_notion("GET", "users/me", "2099-01-01")  # Invalid version
     print(f"[2099-01-01] Status: {status}")
     if status == 400:
         print(f"    Error: {data.get('message')}")

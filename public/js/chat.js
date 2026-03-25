@@ -21,7 +21,7 @@ function extractDisplayValue(val) {
     if (val == null) return '';
     if (typeof val === 'string') return val;
     if (typeof val === 'number' || typeof val === 'boolean') return String(val);
-    
+
     // Notion API形式の各タイプに対応
     if (val.title) return val.title.map(t => t?.text?.content || t?.plain_text || '').join('');
     if (val.rich_text) return val.rich_text.map(t => t?.text?.content || t?.plain_text || '').join('');
@@ -33,7 +33,7 @@ function extractDisplayValue(val) {
     if (val.url) return val.url;
     if (val.email) return val.email;
     if (val.status) return val.status?.name || '';
-    
+
     return JSON.stringify(val);
 }
 
@@ -52,7 +52,7 @@ export function addChatMessage(type, message, properties = null, modelInfo = nul
         timestamp: Date.now(),
         modelInfo: modelInfo
     };
-    
+
     window.App.chat.history.push(entry);
     renderChatHistory();
     saveChatHistory();
@@ -62,12 +62,12 @@ export function addChatMessage(type, message, properties = null, modelInfo = nul
 export function renderChatHistory() {
     const container = document.getElementById('chatHistory');
     container.innerHTML = '';
-    
 
-    
+
+
     window.App.chat.history.forEach((entry, index) => {
 
-        
+
         // スタンプタイプは特別な表示（吹き出しなし、大きく表示）
         if (entry.type === 'stamp') {
             const stampDiv = document.createElement('div');
@@ -76,85 +76,85 @@ export function renderChatHistory() {
             container.appendChild(stampDiv);
             return; // スタンプの処理はここで終了
         }
-        
+
         const bubble = document.createElement('div');
         bubble.className = `chat-bubble ${entry.type}`;
-        
+
         // メッセージ内容
         const processedMessage = entry.message.replace(/\n/g, '<br>');
 
         bubble.innerHTML = processedMessage;
-        
 
-        
+
+
         // AIメッセージにプロパティカードを表示
         if (entry.type === 'ai' && entry.properties && Object.keys(entry.properties).length > 0) {
             const propsCard = document.createElement('div');
             propsCard.className = 'props-card';
-            
+
             for (const [key, val] of Object.entries(entry.properties)) {
                 const row = document.createElement('div');
                 row.className = 'props-card-row';
-                
+
                 const label = document.createElement('span');
                 label.className = 'props-card-key';
                 label.textContent = key;
-                
+
                 const value = document.createElement('span');
                 value.className = 'props-card-val';
                 value.textContent = extractDisplayValue(val);
-                
+
                 row.appendChild(label);
                 row.appendChild(value);
                 propsCard.appendChild(row);
             }
-            
+
             bubble.appendChild(propsCard);
         }
-        
+
         // AI画像関連の表示（propertiesの有無に関係なく動作）
         if (entry.type === 'ai') {
             const metadata = entry.modelInfo?.metadata;
-            
+
             // 画像抽出プロパティのカードUIレンダリング
             if (metadata?.image_properties) {
                 const card = document.createElement('div');
                 card.className = 'image-properties-card';
-                
+
                 const props = metadata.image_properties;
-                
+
                 if (props.title || props.content) {
                     let cardContent = '<div class="properties-container">';
-                    
+
                     if (props.title) {
                         cardContent += `<div class="property-item"><strong>タイトル:</strong> ${props.title}</div>`;
                     }
-                    
+
                     if (props.content) {
                         cardContent += `<div class="property-item"><strong>内容:</strong> ${props.content}</div>`;
                     }
-                    
+
                     cardContent += '</div>';
                     card.innerHTML = cardContent;
                     bubble.appendChild(card);
                 }
             }
-            
+
             // AI生成画像の表示
             if (metadata?.image_base64) {
                 const imgContainer = document.createElement('div');
                 imgContainer.className = 'generated-image-container';
-                
+
                 const img = document.createElement('img');
                 img.src = `data:image/png;base64,${metadata.image_base64}`;
                 img.alt = 'AI生成画像';
                 img.className = 'generated-image';
-                
+
                 imgContainer.appendChild(img);
                 bubble.appendChild(imgContainer);
             }
         }
-        
+
         // ユーザーまたはAIメッセージにホバーボタンを追加
         if (entry.type === 'user' || entry.type === 'ai') {
             // Tap to show "Add to Notion"
@@ -162,7 +162,7 @@ export function renderChatHistory() {
             bubble.onclick = (e) => {
                 // Don't toggle if selecting text
                 if (window.getSelection().toString().length > 0) return;
-                
+
                 // Don't toggle if clicking a link/button inside (except this bubble's container)
                 if (/** @type {HTMLElement} */(e.target).tagName === 'A') return;
 
@@ -175,7 +175,7 @@ export function renderChatHistory() {
                 if (!wasShown) {
                     bubble.classList.add('show-actions');
                 }
-                
+
                 e.stopPropagation(); // Prevent document click from closing it
             };
 
@@ -188,16 +188,16 @@ export function renderChatHistory() {
             };
             bubble.appendChild(addBtn);
         }
-        
+
         // AIのモデル情報表示
         if (entry.type === 'ai' && window.App.debug.showModelInfo && entry.modelInfo) {
             const infoDiv = document.createElement('div');
             infoDiv.className = 'model-info-text';
             const { model, usage, cost } = entry.modelInfo;
-            
+
             // Try to find model info to get provider prefix
             const modelDisplay = getModelDisplayName(model);
-            
+
             let infoText = modelDisplay;
             if (cost) infoText += ` | $${Number(cost).toFixed(5)}`;
             // usage is object {prompt_tokens, completion_tokens, total_tokens}
@@ -205,10 +205,10 @@ export function renderChatHistory() {
                 // 送信・受信・思考トークンを個別表示
                 if (usage.prompt_tokens && usage.completion_tokens) {
                     infoText += ` | S:${usage.prompt_tokens} / R:${usage.completion_tokens}`;
-                    
+
                     // Think トークンがあれば表示（複数の可能性がある位置を確認）
                     let thinkingTokens = null;
-                    
+
                     // Gemini 2.0 thinking models: completion_tokens_details.thinking_tokens
                     if (usage.completion_tokens_details?.thinking_tokens) {
                         thinkingTokens = usage.completion_tokens_details.thinking_tokens;
@@ -221,7 +221,7 @@ export function renderChatHistory() {
                     else if (usage.cached_tokens_details?.thinking_tokens) {
                         thinkingTokens = usage.cached_tokens_details.thinking_tokens;
                     }
-                    
+
                     if (thinkingTokens) {
                         infoText += ` (Think:${thinkingTokens})`;
                     }
@@ -229,14 +229,14 @@ export function renderChatHistory() {
                     infoText += ` | Tokens: ${usage.total_tokens}`;
                 }
             }
-            
+
             infoDiv.textContent = infoText;
             bubble.appendChild(infoDiv);
         }
-        
+
         container.appendChild(bubble);
     });
-    
+
     // 最下部にスクロール
     container.scrollTop = container.scrollHeight;
 }
@@ -254,25 +254,25 @@ export function loadChatHistory() {
         try {
             window.App.chat.history = JSON.parse(saved);
             renderChatHistory();
-            
+
             // Rebuild App.chat.session for API context
             window.App.chat.session = window.App.chat.history
                 .filter(entry => ['user', 'ai'].includes(entry.type))
                 .map(entry => {
                     let content = entry.message;
-                    
+
                     // 画像タグを削除
                     content = content.replace(/<img[^>]*>/g, ''); // imgタグを削除
                     content = content.replace(/<br>/g, ' '); // <br>をスペースに置換
                     content = content.trim(); // 余分な空白を削除
-                    
+
                     return {
                         role: entry.type === 'user' ? 'user' : 'assistant',
                         content: content
                     };
                 })
                 .filter(item => item.content.length > 0);
-            
+
         } catch(e) {
             console.error("History parse error", e);
         }
@@ -284,22 +284,22 @@ export async function sendStamp(emoji) {
     const showToast = window.showToast;
     const recordApiCall = window.recordApiCall;
     const fetchAndTruncatePageContent = window.fetchAndTruncatePageContent;
-    
+
     if (!window.App.target.id) {
         showToast("ターゲットを選択してください");
         return;
     }
-    
+
     // スタンプとしてチャットに追加（大きく表示）
     addChatMessage('stamp', emoji);
-    
+
     // 入力欄をクリア（念のため）
     const memoInput = document.getElementById('memoInput');
     if (memoInput) /** @type {HTMLInputElement} */(memoInput).value = '';
-    
+
     // AIタイピングインジケーター表示
     showAITypingIndicator();
-    
+
     try {
         // リファレンスページの取得
         let referenceContext = null;
@@ -307,7 +307,7 @@ export async function sendStamp(emoji) {
         if (/** @type {HTMLInputElement} */(referenceToggle)?.checked && window.App.target.id) {
             referenceContext = await fetchAndTruncatePageContent(window.App.target.id, window.App.target.type);
         }
-        
+
         // APIリクエスト
         const requestBody = {
             text: emoji,
@@ -317,28 +317,28 @@ export async function sendStamp(emoji) {
             reference_context: referenceContext,
             model: window.App.model.current
         };
-        
+
         const res = await fetch('/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(requestBody)
         });
-        
+
         hideAITypingIndicator();
-        
+
         if (!res.ok) {
             const err = await res.json().catch(() => ({}));
             throw new Error(err.detail?.message || err.detail || `HTTP ${res.status}`);
         }
-        
+
         /** @type {ChatApiResponse} */
         const data = await res.json();
         recordApiCall('/api/chat', 'POST', requestBody, data, null, res.status);
-        
+
         // セッション履歴を更新
         window.App.chat.session.push({ role: 'user', content: emoji });
         window.App.chat.session.push({ role: 'assistant', content: data.message });
-        
+
         // AI応答を表示
         const modelInfo = {
             model: data.model,
@@ -346,10 +346,10 @@ export async function sendStamp(emoji) {
             cost: data.cost
         };
         addChatMessage('ai', data.message, null, modelInfo);
-        
+
         // コスト累計
         if (data.cost) window.App.model.sessionCost += data.cost;
-        
+
     } catch (err) {
         hideAITypingIndicator();
         console.error('[sendStamp] Error:', err);
@@ -363,17 +363,17 @@ export async function sendStamp(emoji) {
 export function showAITypingIndicator() {
     const chatHistory = document.getElementById('chatHistory');
     if (!chatHistory) return;
-    
+
     // 既存のインジケーターがあれば削除
     const existing = chatHistory.querySelector('.ai-typing-indicator');
     if (existing) existing.remove();
-    
+
     // 新しいインジケーターを作成
     const indicator = document.createElement('div');
     indicator.className = 'chat-bubble ai ai-typing-indicator';
     indicator.innerHTML = '<div class="typing-dots"><span></span><span></span><span></span></div>';
     chatHistory.appendChild(indicator);
-    
+
     // 最下部にスクロール
     chatHistory.scrollTop = chatHistory.scrollHeight;
 }
@@ -382,7 +382,7 @@ export function showAITypingIndicator() {
 export function hideAITypingIndicator() {
     const chatHistory = document.getElementById('chatHistory');
     if (!chatHistory) return;
-    
+
     const indicator = chatHistory.querySelector('.ai-typing-indicator');
     if (indicator) indicator.remove();
 }
@@ -391,53 +391,53 @@ export async function handleAddFromBubble(entry) {
     const showToast = window.showToast;
     const setLoading = window.setLoading;
     const recordApiCall = window.recordApiCall;
-    
+
     console.log('[handleAddFromBubble] Called with entry:', entry);
     console.log('[handleAddFromBubble] Current target:', window.App?.target);
-    
+
     if (!entry || !entry.message) {
         console.warn('[handleAddFromBubble] No entry or message');
         return;
     }
-    
+
     if (!window.App.target.id) {
         console.error('[handleAddFromBubble] No target selected. Target state:', window.App?.target);
         showToast('保存先のターゲットを選択してください');
         return;
     }
-    
+
     console.log('[handleAddFromBubble] Target type:', window.App.target.type);
     console.log('[handleAddFromBubble] Target ID:', window.App.target.id);
-    
+
     // Clean HTML tags from message content
     const content = entry.message
         .replace(/<br>/g, '\n')
         .replace(/整形案:\n/, '')
         .replace(/<img[^>]*>/g, '')  // Remove image tags
         .trim();
-    
+
     if (!content) {
         showToast('保存する内容がありません');
         return;
     }
-    
+
     setLoading(true, '保存中...');
-    
+
     try {
         // Build properties for database type
         const properties = {};
-        
+
         if (window.App.target.type === 'database') {
             // Database: AI抽出プロパティがあればベースとして使用
             Object.assign(properties, entry.properties || {});
             const inputs = document.querySelectorAll('#propertiesForm .prop-input');
-            
+
             // Collect properties from form inputs
             inputs.forEach(/** @param {Element} el */ el => {
                 const input = /** @type {HTMLElement} */(el);
                 const key = input.dataset?.key;
                 const type = input.dataset?.type;
-                
+
                 if (type === 'rich_text') {
                     // Use form value if exists, otherwise bubble content
                     const val = /** @type {HTMLInputElement} */(input).value || content;
@@ -471,7 +471,7 @@ export async function handleAddFromBubble(entry) {
                     if (numVal) properties[key] = { number: Number(numVal) };
                 }
             });
-            
+
             // IMPORTANT: Always set the title property from schema
             // Title properties are not shown in the form (skipped in renderDynamicForm),
             // so we need to find and populate them from the schema
@@ -485,7 +485,7 @@ export async function handleAddFromBubble(entry) {
                 }
             }
         }
-        
+
         // Build payload for both database and page types
         const payload = {
             target_db_id: window.App.target.id,
@@ -493,28 +493,28 @@ export async function handleAddFromBubble(entry) {
             text: content,
             properties: window.App.target.type === 'database' ? properties : {}
         };
-        
+
         console.log('[handleAddFromBubble] Payload prepared:', payload);
         console.log('[handleAddFromBubble] Calling /api/save...');
-        
+
         // Single unified fetch for both database and page
         const res = await fetch('/api/save', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(payload)
         });
-        
+
         console.log('[handleAddFromBubble] Response status:', res.status);
-        
+
         const data = await res.json().catch(() => ({}));
-        recordApiCall('/api/save', 'POST', payload, data, 
-                     res.ok ? null : (data.detail || '保存に失敗しました'), 
+        recordApiCall('/api/save', 'POST', payload, data,
+                     res.ok ? null : (data.detail || '保存に失敗しました'),
                      res.status);
-        
+
         if (!res.ok) throw new Error(data.detail || '保存に失敗しました');
-        
+
         showToast('✅ Notionに追加しました');
-        
+
     } catch(e) {
         console.error('[handleAddFromBubble] Error caught:', e);
         console.error('[handleAddFromBubble] Error stack:', /** @type {Error} */(e).stack);
@@ -540,66 +540,66 @@ export async function handleChatAI(inputText = null) {
     const fetchAndTruncatePageContent = window.fetchAndTruncatePageContent;
     const clearPreviewImage = window.clearPreviewImage;
     const updateSessionCost = /** @type {any} */(window).updateSessionCost || ((cost) => { if (cost) window.App.model.sessionCost += cost; });
-    
+
     const memoInput = document.getElementById('memoInput');
     const text = inputText !== null ? inputText : /** @type {HTMLInputElement} */(memoInput).value.trim();
 
-    
+
     // 入力チェック: テキストまたは画像が必須
     if (!text && !window.App.image.data) {
         showToast("テキストまたは画像を入力してください");
         return;
     }
-    
+
     // ターゲット未選択チェック
     if (!window.App.target.id) {
         showToast("ターゲットを選択してください");
         return;
     }
     updateState('📝', 'メッセージを準備中...', { step: 'preparing' });
-    
+
     // 1. ユーザーメッセージの表示準備
     let displayMessage = text;
     if (window.App.image.data) {
         const imgTag = `<br><img src="data:${window.App.image.mimeType};base64,${window.App.image.data}" style="max-width:100px; border-radius:4px;">`;
         displayMessage = (text ? text + "<br>" : "") + imgTag;
     }
-    
+
     addChatMessage('user', displayMessage);
-    
+
     // 重要: 送信データを一時変数にコピーしてからステートをクリアする
     const imageToSend = window.App.image.data;
     const mimeToSend = window.App.image.mimeType;
     const isImageGeneration = window.App.image.generationMode || false;
-    
+
     // 2. 会話履歴の準備
     const historyToSend = window.App.chat.session.slice(-10);
-    
+
     // 3. AIへのコンテキスト用にメッセージを追加（画像送信時もマーカーを残す）
     const contextMessage = text || (imageToSend ? '[画像を送信しました]' : '');
     if (contextMessage) {
         window.App.chat.session.push({role: 'user', content: contextMessage});
     }
-    
+
     // 入力欄とプレビューのクリア
     /** @type {HTMLInputElement} */(memoInput).value = '';
     memoInput.dispatchEvent(new Event('input'));
     clearPreviewImage();
-    
+
     // 画像生成モードをクリア（タグを消す）
     const disableImageGenMode = window.disableImageGenMode;
     if (disableImageGenMode) {
         disableImageGenMode();
     }
 
-    
+
     // 4. 使用するAIモデルの決定
     const hasImage = !!imageToSend;
     let modelToUse = window.App.model.current;
     if (!modelToUse) {
         modelToUse = hasImage ? window.App.model.defaultMultimodal : window.App.model.defaultText;
     }
-    
+
     // UI表示用モデル名の取得
     const modelDisplay = getModelDisplayName(modelToUse, 'Auto');
 
@@ -610,10 +610,10 @@ export async function handleChatAI(inputText = null) {
         autoSelected: !window.App.model.current,
         step: 'analyzing'
     });
-    
+
     try {
         const systemPrompt = window.App.target.systemPrompt || window.App.defaultPrompt;
-        
+
         // 「ページを参照」機能
         const referenceToggle = document.getElementById('referencePageToggle');
         let referenceContext = '';
@@ -634,45 +634,45 @@ export async function handleChatAI(inputText = null) {
             model: window.App.model.current,
             image_generation: isImageGeneration
         };
-        
+
         updateState('📡', 'サーバーに送信中...', { step: 'uploading' });
         showAITypingIndicator();
-        
+
         const res = await fetch('/api/chat', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(payload)
         });
         updateState('📥', 'レスポンスを処理中...', { step: 'processing_response' });
-        
+
         if (!res.ok) {
             const errorData = await res.json().catch(() => ({ detail: "解析中にエラーが発生しました" }));
             recordApiCall('/api/chat', 'POST', payload, errorData, errorData.detail?.message || JSON.stringify(errorData), res.status);
             throw new Error(errorData.detail?.message || JSON.stringify(errorData));
         }
-        
+
         /** @type {ChatApiResponse} */
         const data = await res.json();
-        
+
         // API通信履歴に記録
         recordApiCall('/api/chat', 'POST', payload, data, null, res.status);
-        
+
         // AI応答受信後、インジケーターを非表示
         hideAITypingIndicator();
-        
+
         // コスト情報の更新
         if (data.cost) {
             updateSessionCost(data.cost);
         }
-        
+
         // ステート更新（完了）
         const completedDisplay = getModelDisplayName(data.model);
-        
-        updateState('✅', `Completed (${completedDisplay})`, { 
+
+        updateState('✅', `Completed (${completedDisplay})`, {
             usage: data.usage,
             cost: data.cost
         });
-        
+
         // 5. AIメッセージの表示（画像生成時はmessageが空でもimage_base64があればOK）
         if (data.message || data.image_base64) {
             const displayMessage = data.message || '';
@@ -708,22 +708,21 @@ export async function handleChatAI(inputText = null) {
             const warningMsg = `⚠️ AIからの応答が空でした（model: ${data.model || 'unknown'}）`;
             addChatMessage('system', warningMsg);
         }
-        
+
         // 6. 抽出されたプロパティのフォーム反映
         if (data.properties && window.fillForm) {
             window.fillForm(data.properties);
         }
-        
+
     } catch(e) {
         console.error('[handleChatAI] Error:', e);
         hideAITypingIndicator();
         const errorMessage = /** @type {Error} */(e).message;
-        
+
         recordApiCall('/api/chat', 'POST', { text: text, target_id: window.App.target.id }, null, errorMessage, null);
-        
+
         updateState('❌', 'Error', { error: errorMessage });
         addChatMessage('system', "エラー: " + errorMessage);
         showToast("エラー: " + errorMessage);
     }
 }
-

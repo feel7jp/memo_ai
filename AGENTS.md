@@ -68,6 +68,8 @@ python -m uvicorn api.index:app --reload --host 0.0.0.0
 | `.env` / `.env.example` | 環境変数（APIキー、モデル設定など） |
 | `.gitignore` | Git除外設定 |
 | `requirements.txt` | Python依存パッケージ |
+| `requirements-dev.txt` | 開発専用依存パッケージ（pre-commit等） |
+| `.pre-commit-config.yaml` | pre-commitフック設定（コミット時・プッシュ時チェック） |
 | `pyproject.toml` | Python プロジェクト設定（ruff, pytest等） |
 | `pytest.ini` | pytest設定（テスト検出・オプション） |
 | `package.json` | npm設定（TypeScriptの型チェック用） |
@@ -127,7 +129,7 @@ python -m uvicorn api.index:app --reload --host 0.0.0.0
 | :--- | :--- |
 | `AGENTS.md` | テスト固有ルール |
 | `__init__.py` | パッケージ初期化 |
-| `conftest.py` | **共通フィクスチャ** — モック設定、テスト用ヘルパー関数 |
+| `conftest.py` | **共通フィクスチャ** — ダミー環境変数ガード、モック設定、テスト用ヘルパー関数 |
 | `test_api_contract.py` | **API契約テスト** — JS↔Backendのエンドポイント整合性を自動検証 |
 | `test_html_js_consistency.py` | **HTML/JS整合性テスト** — HTML内のIDとJSの参照整合性を検証 |
 | `test_current_api.py` | エンドポイントの単体テスト |
@@ -149,6 +151,14 @@ python -m uvicorn api.index:app --reload --host 0.0.0.0
 | `inspect_images.py` | デバッグ用: 画像データ検査スクリプト |
 | `verify_e2e_image_gen.py` | デバッグ用: 画像生成E2E検証スクリプト |
 | `manual/` | 手動テスト用スクリプト（Notion APIバージョン互換性チェック等） |
+
+---
+
+### `scripts/` — ユーティリティスクリプト
+
+| ファイル | 責務 |
+| :--- | :--- |
+| `check_env_secrets.py` | **pre-commitフック** — `.env`に実APIキーが含まれていないかチェック |
 
 ---
 
@@ -194,8 +204,8 @@ python -m uvicorn api.index:app --reload --host 0.0.0.0
 
 ## 技術スタック
 
-**Backend**: Python 3.9+, FastAPI, Uvicorn, LiteLLM  
-**Frontend**: Vanilla JavaScript (ES6+), Vanilla CSS  
+**Backend**: Python 3.9+, FastAPI, Uvicorn, LiteLLM
+**Frontend**: Vanilla JavaScript (ES6+), Vanilla CSS
 **禁止**: React, Vue, Webpack, Vite (軽量・シンプルを維持)
 
 ---

@@ -162,7 +162,9 @@ class TestGenerateImageResponse:
         mock_response.choices[0].message = mock_message
         mock_response.usage = MagicMock()
         mock_response.usage.model_dump.return_value = {
-            "completion_tokens": 30, "prompt_tokens": 100, "total_tokens": 130,
+            "completion_tokens": 30,
+            "prompt_tokens": 100,
+            "total_tokens": 130,
         }
 
         with patch("litellm.acompletion", new_callable=AsyncMock) as mock_ac:
@@ -193,7 +195,9 @@ class TestGenerateImageResponse:
         mock_response.choices[0].message = mock_message
         mock_response.usage = MagicMock()
         mock_response.usage.model_dump.return_value = {
-            "completion_tokens": 0, "prompt_tokens": 10, "total_tokens": 10,
+            "completion_tokens": 0,
+            "prompt_tokens": 10,
+            "total_tokens": 10,
         }
 
         with patch("litellm.acompletion", new_callable=AsyncMock) as mock_ac:
@@ -218,9 +222,7 @@ class TestGenerateImageResponse:
         with patch("litellm.aimage_generation", new_callable=AsyncMock) as mock_ig:
             mock_ig.return_value = mock_response
             with pytest.raises(RuntimeError) as exc_info:
-                await generate_image_response(
-                    "a cute cat", "openai/dall-e-3"
-                )
+                await generate_image_response("a cute cat", "openai/dall-e-3")
 
         assert "Image generation failed" in str(exc_info.value)
 
@@ -244,7 +246,10 @@ class TestGenerateImageResponse:
                 )
 
         assert "Image generation failed" in str(exc_info.value)
-        assert "content policy" in str(exc_info.value).lower() or "rejected" in str(exc_info.value).lower()
+        assert (
+            "content policy" in str(exc_info.value).lower()
+            or "rejected" in str(exc_info.value).lower()
+        )
 
 
 class TestImageGenFailureInChatAI:
@@ -255,9 +260,13 @@ class TestImageGenFailureInChatAI:
         """画像生成失敗時に _image_gen_failed=True と日本語メッセージを返すこと"""
         from api.ai import chat_analyze_text_with_ai
 
-        error = RuntimeError("Image generation failed: AIが画像ではなくテキストで応答しました")
+        error = RuntimeError(
+            "Image generation failed: AIが画像ではなくテキストで応答しました"
+        )
 
-        with patch("api.llm_client.generate_image_response", new_callable=AsyncMock) as mock_gen:
+        with patch(
+            "api.llm_client.generate_image_response", new_callable=AsyncMock
+        ) as mock_gen:
             mock_gen.side_effect = error
             result = await chat_analyze_text_with_ai(
                 text="猫の絵を描いて",

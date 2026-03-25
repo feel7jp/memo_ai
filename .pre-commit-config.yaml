@@ -1,0 +1,50 @@
+default_stages: [pre-commit]
+minimum_pre_commit_version: "3.2.0"
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+      - id: check-added-large-files
+        args: ["--maxkb=500"]
+      - id: detect-private-key
+      - id: check-merge-conflict
+      - id: check-case-conflict
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.7
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+        files: ^(api|tests|scripts)/
+      - id: ruff-format
+        files: ^(api|tests|scripts)/
+
+  - repo: local
+    hooks:
+      - id: check-env-secrets
+        name: Check .env for real secrets
+        entry: python scripts/check_env_secrets.py
+        language: system
+        files: ^\.env$
+        pass_filenames: false
+
+      - id: pytest-smoke
+        name: Run smoke tests
+        entry: python -m pytest -m smoke --tb=short -q
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
+      - id: tsc-check
+        name: TypeScript type check
+        entry: npm run type-check
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]

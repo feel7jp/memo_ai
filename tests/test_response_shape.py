@@ -8,7 +8,7 @@ types.d.ts をパースして、バックエンドのレスポンスが型定義
 import re
 import pytest
 from pathlib import Path
-from typing import Dict, Set
+from typing import Set
 
 
 TYPES_FILE = Path("public/js/types.d.ts")

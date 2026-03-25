@@ -4,7 +4,6 @@ Unit tests for api.services module
 Tests for business logic helpers extracted during Save Logic Unification refactoring.
 """
 
-import pytest
 from api.services import (
     sanitize_image_data,
     _sanitize_rich_text_field,
