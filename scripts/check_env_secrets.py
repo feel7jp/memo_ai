@@ -63,7 +63,9 @@ def check_env_file() -> list[str]:
 
     warnings = []
 
-    for line_num, line in enumerate(ENV_FILE.read_text().splitlines(), 1):
+    for line_num, line in enumerate(
+        ENV_FILE.read_text(encoding="utf-8").splitlines(), 1
+    ):
         # コメント行・空行をスキップ
         stripped = line.strip()
         if not stripped or stripped.startswith("#"):
