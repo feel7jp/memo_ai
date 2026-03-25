@@ -81,6 +81,21 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
+<details>
+<summary>📌 開発環境のセットアップ（pre-commit フック）</summary>
+
+```bash
+# 開発用パッケージのインストール
+pip install -r requirements-dev.txt
+npm ci
+
+# pre-commit フックの登録
+pre-commit install
+pre-commit install --hook-type pre-push
+```
+
+</details>
+
 ### 3. 起動
 
 ```bash
@@ -231,6 +246,18 @@ pytest -v
 
 ```bash
 npm run type-check
+```
+
+### コード品質チェック (pre-commit)
+
+`pre-commit` フレームワークでコミット時・プッシュ時にコード品質を自動チェックします。
+
+```bash
+# 全ファイルに対してチェック実行
+pre-commit run --all-files
+
+# pre-push フック（smoke テスト + 型チェック）の手動実行
+pre-commit run --hook-stage pre-push --all-files
 ```
 
 ---

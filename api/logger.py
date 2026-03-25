@@ -111,4 +111,3 @@ def configure_third_party_loggers():
             handler.setFormatter(formatter)
             lib_logger.addHandler(handler)
             lib_logger.propagate = False
-

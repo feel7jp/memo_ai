@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 load_dotenv()
 sys.path.insert(0, ".")
 
-from litellm import acompletion
+from litellm import acompletion  # noqa: E402
 
 
 async def inspect_response():

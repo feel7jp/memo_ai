@@ -118,9 +118,9 @@ async function fetchData(query) {
     if (currentController) {
         currentController.abort();
     }
-    
+
     currentController = new AbortController();
-    
+
     try {
         const response = await fetch('/api/search', {
             method: 'POST',

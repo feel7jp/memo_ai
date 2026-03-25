@@ -20,7 +20,8 @@ logger = setup_logger(__name__)
 IS_VERCEL = os.environ.get("VERCEL") == "1"
 litellm.set_verbose = False if IS_VERCEL else LITELLM_VERBOSE
 # Vercel環境: LiteLLM内部loggerのANSIカラーコードを除去（ログ自体は維持）
-from api.logger import configure_third_party_loggers
+from api.logger import configure_third_party_loggers  # noqa: E402
+
 configure_third_party_loggers()
 
 # デバッグ用: 直近10件のLLM API通信ログ
@@ -227,7 +228,9 @@ async def generate_json(prompt: Any, model: str, retries: int = None) -> Dict[st
         except Exception as e:
             if attempt == retries:
                 # 最大リトライ回数に達した場合 - 最下層なのでexc_info=Trueでフルトレースバック出力
-                logger.error("Generation failed after %d retries: %s", retries, e, exc_info=True)
+                logger.error(
+                    "Generation failed after %d retries: %s", retries, e, exc_info=True
+                )
                 # ログ記録（エラー時）
                 _record_llm_log(
                     model,
@@ -348,8 +351,14 @@ async def generate_image_response(prompt: str, model: str) -> Dict[str, Any]:
             if not image_base64:
                 # API成功だが画像なし → エラーメッセージにAI応答要約を含めて原因を明示
                 if message_text:
-                    truncated = (message_text[:100] + "...") if len(message_text) > 100 else message_text
-                    raise RuntimeError(f"AIが画像ではなくテキストで応答しました:\n{truncated}")
+                    truncated = (
+                        (message_text[:100] + "...")
+                        if len(message_text) > 100
+                        else message_text
+                    )
+                    raise RuntimeError(
+                        f"AIが画像ではなくテキストで応答しました:\n{truncated}"
+                    )
                 else:
                     raise RuntimeError("AIから画像データが返されませんでした")
 

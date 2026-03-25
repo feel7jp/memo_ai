@@ -7,12 +7,12 @@ let promptOriginalValue = '';
 // システムプロンプトモーダルを開く
 export function openPromptModal() {
     const showToast = window.showToast;
-    
+
     if (!window.App.target.id) {
         showToast('ターゲットを選択してください');
         return;
     }
-    
+
     const modal = document.getElementById('promptModal');
     /** @type {HTMLSelectElement} */
     const selector = /** @type {any} */(document.getElementById('promptTargetSelect'));
@@ -22,13 +22,13 @@ export function openPromptModal() {
     const saveBtn = /** @type {any} */(document.getElementById('savePromptBtn'));
     /** @type {HTMLButtonElement} */
     const resetBtn = /** @type {any} */(document.getElementById('resetPromptBtn'));
-    
+
     // ターゲットリストを読み込み（キャッシュから）
     const cachedTargets = localStorage.getItem(window.App.cache.KEYS.TARGETS);
     if (cachedTargets) {
         try {
             const data = JSON.parse(cachedTargets).data;
-            
+
             // プロンプトモーダル用のターゲットリスト作成（新規作成オプションなし）
             selector.innerHTML = '';
             if (data.targets && data.targets.length > 0) {
@@ -48,17 +48,17 @@ export function openPromptModal() {
             console.error('Failed to load targets for prompt modal:', e);
         }
     }
-    
+
     // 選択中のターゲットのプロンプトを表示
     const promptKey = `${window.App.cache.KEYS.PROMPT_PREFIX}${window.App.target.id}`;
     const savedPrompt = localStorage.getItem(promptKey);
-    
+
     // リセットボタン: 常に有効化
     if (resetBtn) {
         resetBtn.disabled = false;
         resetBtn.classList.remove('hidden');
     }
-    
+
     // カスタムプロンプトがあれば表示、なければデフォルトを表示
     if (savedPrompt) {
         textarea.value = savedPrompt;
@@ -66,23 +66,23 @@ export function openPromptModal() {
         textarea.value = window.App.defaultPrompt;
     }
     textarea.placeholder = 'システムプロンプトを入力してください...';
-    
+
     promptOriginalValue = textarea.value; // 元の値を保存
     textarea.disabled = false;
     saveBtn.disabled = false;
-    
+
     // ターゲット変更時のイベントリスナーを設定
     // 既存のリスナーを削除してから追加（重複防止）
     /** @type {HTMLSelectElement} */
     const newSelector = /** @type {any} */(selector.cloneNode(true));
     selector.parentNode.replaceChild(newSelector, selector);
-    
+
     newSelector.addEventListener('change', function(e) {
         /** @type {HTMLSelectElement} */
         const target = /** @type {any} */(e.target);
         const newTargetId = target.value;
         const prevTargetId = target.dataset.prevValue;
-        
+
         // 変更がある場合は確認
         if (textarea.value !== promptOriginalValue) {
             showDiscardConfirmation(() => {
@@ -105,7 +105,7 @@ export function openPromptModal() {
             loadPromptForTarget(newTargetId);
         }
     });
-    
+
     // モーダルを表示
     modal.classList.remove('hidden');
 }
@@ -116,7 +116,7 @@ export function showDiscardConfirmation(onConfirm) {
     const confirmBtn = document.getElementById('confirmDiscardBtn');
     const cancelBtn = document.getElementById('cancelDiscardBtn');
     const closeBtn = document.getElementById('closeConfirmDiscardModalBtn');
-    
+
     // イベントリスナーの一時的な登録（クリーンアップが必要）
     const cleanup = () => {
         confirmBtn.onclick = null;
@@ -124,15 +124,15 @@ export function showDiscardConfirmation(onConfirm) {
         closeBtn.onclick = null;
         modal.classList.add('hidden');
     };
-    
+
     confirmBtn.onclick = () => {
         cleanup();
         onConfirm();
     };
-    
+
     cancelBtn.onclick = cleanup;
     closeBtn.onclick = cleanup;
-    
+
     modal.classList.remove('hidden');
 }
 
@@ -148,7 +148,7 @@ export function closePromptModal() {
         });
         return;
     }
-    
+
     const modal = document.getElementById('promptModal');
     modal.classList.add('hidden');
 }
@@ -159,7 +159,7 @@ export async function saveSystemPrompt() {
     /** @type {HTMLSelectElement} */
     const selector = /** @type {any} */(document.getElementById('promptTargetSelect'));
     const targetId = selector?.value || window.App.target.id;
-    
+
     if (!targetId) return;
 
     /** @type {HTMLTextAreaElement} */
@@ -169,24 +169,24 @@ export async function saveSystemPrompt() {
     /** @type {HTMLButtonElement} */
     const resetBtn = /** @type {any} */(document.getElementById('resetPromptBtn'));
     const newPrompt = textarea.value.trim();
-    
+
     saveBtn.disabled = true;
-    
+
     try {
         const promptKey = `${window.App.cache.KEYS.PROMPT_PREFIX}${targetId}`;
-        
+
         // 空白文字のみ、または空の場合 → デフォルトを使用（カスタム設定を削除）
         // デフォルトと同じ場合 → デフォルトを使用（カスタム設定を削除）
         // それ以外 → カスタムプロンプトとして保存
         if (!newPrompt || newPrompt === window.App.defaultPrompt.trim()) {
             // デフォルトを使用: localStorageから削除
             localStorage.removeItem(promptKey);
-            
+
             // 現在のターゲットと同じ場合はApp.target.systemPromptも更新
             if (targetId === window.App.target.id) {
                 window.App.target.systemPrompt = null;
             }
-            
+
             // リセットボタンを隠す
             if (resetBtn) {
                 resetBtn.classList.add('hidden');
@@ -195,22 +195,22 @@ export async function saveSystemPrompt() {
         } else {
             // カスタムプロンプトを保存
             localStorage.setItem(promptKey, newPrompt);
-            
+
             // 現在のターゲットと同じ場合はApp.target.systemPromptも更新
             if (targetId === window.App.target.id) {
                 window.App.target.systemPrompt = newPrompt;
             }
-            
+
             // リセットボタンを表示
             if (resetBtn) {
                 resetBtn.classList.remove('hidden');
                 resetBtn.disabled = false;
             }
         }
-        
+
         // 保存後、元の値を更新（ダーティフラグをクリア）
         promptOriginalValue = textarea.value;
-        
+
         showToast('✅ システムプロンプトを保存しました');
         closePromptModal(); // 保存後にモーダルを閉じる
     } catch (e) {
@@ -239,10 +239,10 @@ export function loadPromptForTarget(targetId) {
     const textarea = /** @type {any} */(document.getElementById('promptTextarea'));
     /** @type {HTMLButtonElement} */
     const resetBtn = /** @type {any} */(document.getElementById('resetPromptBtn'));
-    
+
     const promptKey = `${window.App.cache.KEYS.PROMPT_PREFIX}${targetId}`;
     const savedPrompt = localStorage.getItem(promptKey);
-    
+
     // カスタムプロンプトがあれば表示、なければデフォルトを表示
     if (savedPrompt) {
         textarea.value = savedPrompt;
@@ -251,7 +251,7 @@ export function loadPromptForTarget(targetId) {
     }
     textarea.placeholder = 'システムプロンプトを入力してください...';
     promptOriginalValue = textarea.value;
-    
+
     // リセットボタンの表示制御
     if (resetBtn) {
         resetBtn.disabled = false;

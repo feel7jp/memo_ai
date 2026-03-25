@@ -457,7 +457,6 @@ async def get_content(page_id: str, request: Request, type: str = "page"):
     except Exception as e:
         logger.error("[Content Error] %s: %s", type(e).__name__, e, exc_info=True)
 
-
         # エラー時は空のコンテンツを返して処理を続行
         # （参照コンテキストがなくてもチャットは機能すべき）
         return {"content": f"コンテンツの取得中にエラーが発生しました: {str(e)}"}
@@ -537,12 +536,16 @@ async def analyze_endpoint(request: Request, analyze_req: AnalyzeRequest):
     except Exception as e:
         logger.error("[AI Analysis Error] %s: %s", type(e).__name__, e)
 
-
         raise HTTPException(
             status_code=500,
             detail=_build_error_detail(
-                "AI analysis failed", e, "AIの処理中にエラーが発生しました",
-                ["しばらく待ってから再試行してください", "問題が続く場合は管理者にお問い合わせください"],
+                "AI analysis failed",
+                e,
+                "AIの処理中にエラーが発生しました",
+                [
+                    "しばらく待ってから再試行してください",
+                    "問題が続く場合は管理者にお問い合わせください",
+                ],
             ),
         )
 
@@ -617,12 +620,13 @@ async def chat_endpoint(request: Request, chat_req: ChatRequest):
             )
         except Exception as ai_error:
             logger.error("[Chat AI Error] %s: %s", type(ai_error).__name__, ai_error)
-    
 
             raise HTTPException(
                 status_code=500,
                 detail=_build_error_detail(
-                    "Chat AI failed", ai_error, "チャット処理中にエラーが発生しました",
+                    "Chat AI failed",
+                    ai_error,
+                    "チャット処理中にエラーが発生しました",
                     ["しばらく待ってから再試行してください"],
                 ),
             )
@@ -631,11 +635,12 @@ async def chat_endpoint(request: Request, chat_req: ChatRequest):
     except Exception as e:
         logger.error("[Chat Endpoint Error] %s", e)
 
-
         raise HTTPException(
             status_code=500,
             detail=_build_error_detail(
-                "Unexpected error", e, "予期しないエラーが発生しました",
+                "Unexpected error",
+                e,
+                "予期しないエラーが発生しました",
             ),
         )
 

@@ -5,7 +5,20 @@ pytest設定ファイル
 """
 
 import io
+import os
 import sys
+
+# テスト用ダミー環境変数（未設定時のみ）
+# api/index.py の必須チェック（NOTION_API_KEY, NOTION_ROOT_PAGE_ID）を
+# 通過させるため、import 前に仮値を設定する。
+# .env が設定済みの環境ではスキップされる。
+_test_env_defaults = {
+    "NOTION_API_KEY": "ntn_test_dummy_key_for_ci",
+    "NOTION_ROOT_PAGE_ID": "00000000000000000000000000000000",
+}
+for _key, _val in _test_env_defaults.items():
+    if not os.environ.get(_key):
+        os.environ[_key] = _val
 
 # Windows cp932対策: stdout/stderrをUTF-8に強制（Mac/Linuxではスキップ）
 # NOTE: api.index のimportでロガーが絵文字を出力するため、import前に実行が必要

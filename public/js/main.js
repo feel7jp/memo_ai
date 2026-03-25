@@ -1,30 +1,30 @@
 /// <reference path="./types.d.ts" />
 
-import { 
-    openDebugModal, closeDebugModal, loadDebugInfo, 
-    initializeDebugMode, updateDebugModeUI, 
-    recordApiCall, copyApiHistory, copyApiEntry, debugLog 
+import {
+    openDebugModal, closeDebugModal, loadDebugInfo,
+    initializeDebugMode, updateDebugModeUI,
+    recordApiCall, copyApiHistory, copyApiEntry, debugLog
 } from './debug.js';
 
-import { 
-    compressImage, capturePhotoFromCamera, 
+import {
+    compressImage, capturePhotoFromCamera,
     readFileAsBase64, setPreviewImage, clearPreviewImage,
     enableImageGenMode, disableImageGenMode,
     setupImageHandlers
 } from './images.js';
 
-import { 
+import {
     addChatMessage, renderChatHistory, saveChatHistory, loadChatHistory,
-    sendStamp, handleChatAI, showAITypingIndicator, hideAITypingIndicator, handleAddFromBubble 
+    sendStamp, handleChatAI, showAITypingIndicator, hideAITypingIndicator, handleAddFromBubble
 } from './chat.js';
 
-import { 
-    openPromptModal, closePromptModal, saveSystemPrompt, 
-    resetSystemPrompt, showDiscardConfirmation, loadPromptForTarget 
+import {
+    openPromptModal, closePromptModal, saveSystemPrompt,
+    resetSystemPrompt, showDiscardConfirmation, loadPromptForTarget
 } from './prompt.js';
 
-import { 
-    loadAvailableModels, openModelModal, renderModelList, 
+import {
+    loadAvailableModels, openModelModal, renderModelList,
     createModelItem, selectTempModel, saveModelSelection, closeModelModal,
     updateSessionCost
 } from './model.js';
@@ -82,7 +82,7 @@ const App = {
         },
         lastTargetRefresh: 0 // Timestamp of last target list refresh
     },
-    
+
     // Application State
     target: {
         id: null,
@@ -90,19 +90,19 @@ const App = {
         schema: null,
         systemPrompt: null // Custom prompt for this target
     },
-    
+
     chat: {
         history: [], // For UI display
         session: [], // For API context (user/assistant only)
         isComposing: false // For IME handling
     },
-    
+
     image: {
         data: null,  // Base64画像データ
         mimeType: null,  // MIMEタイプ
         generationMode: false,  // 画像生成モード
     },
-    
+
     model: {
         allModels: [],      // All models from API
         available: [],      // Recommended models
@@ -118,7 +118,7 @@ const App = {
         multimodalAvailability: null, // Availability of default multimodal model
         imageGenerationAvailability: null // Availability of image generation models
     },
-    
+
     debug: {
         enabled: true,      // Frontend debug logging
         serverMode: false,  // Server DEBUG_MODE status
@@ -128,7 +128,7 @@ const App = {
         lastModelList: null,  // For debugging model list
         lastAllLogs: null
     },
-    
+
     // バックエンドから取得するため、初期値は空文字列
     // debug.js の initializeDebugMode() で /api/config から取得される
     defaultPrompt: ''
@@ -159,13 +159,13 @@ async function performSaveRequest(payload, messages) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
     });
-    
+
     if (!res.ok) {
         const errorText = await res.text();
         recordApiCall('/api/save', 'POST', payload, null, errorText, res.status);
         throw new Error(errorText);
     }
-    
+
     /** @type {SaveApiResponse} */
     const data = await res.json();
     recordApiCall('/api/save', 'POST', payload, data, null, res.status);
@@ -178,13 +178,13 @@ function updateStatusArea() {
     const loading = document.getElementById('loadingIndicator');
     const saveStatus = document.getElementById('saveStatus');
     const area = document.querySelector('.status-area');
-    
+
     if (!area) return;
 
     // Check if loading is visible OR saveStatus has text
     const isLoading = loading && !loading.classList.contains('hidden');
     const hasStatus = saveStatus && saveStatus.textContent.trim() !== '';
-    
+
     if (isLoading || hasStatus) {
         /** @type {HTMLElement} */(area).style.display = 'flex';
     } else {
@@ -236,13 +236,13 @@ function updateState(icon, message, details = null) {
     const stateIcon = document.getElementById('stateIcon');
     const stateText = document.getElementById('stateText');
     const stateDetailsContent = document.getElementById('stateDetailsContent');
-    
+
     // UI要素がない場合はログ出力のみ
     if (!stateDisplay || !stateIcon || !stateText) {
 
         return;
     }
-    
+
     stateIcon.textContent = icon;
     stateText.textContent = message;
     stateDisplay.classList.remove('hidden');
@@ -254,9 +254,9 @@ function updateState(icon, message, details = null) {
         // デバッグモードでない場合はクリア
         stateDetailsContent.textContent = '';
     }
-    
 
-    
+
+
     // Auto-hide after 3 seconds if this is a completion state (✅ or ❌)
     if (icon === '✅' || icon === '❌') {
         setTimeout(() => {
@@ -278,7 +278,7 @@ window.updateState = updateState;
 async function fetchWithCache(url, cacheKey, ttl = 60000) {
     const now = Date.now();
     const cached = localStorage.getItem(cacheKey);
-    
+
     if (cached) {
         const { timestamp, data } = JSON.parse(cached);
         if (now - timestamp < ttl) {
@@ -286,21 +286,21 @@ async function fetchWithCache(url, cacheKey, ttl = 60000) {
             return data;
         }
     }
-    
+
     debugLog(`Fetching ${url}`);
     const res = await fetch(url);
     if (!res.ok) {
         recordApiCall(url, 'GET', null, null, `HTTP ${res.status}`, res.status);
         throw new Error(`Fetch failed: ${res.status}`);
     }
-    
+
     const data = await res.json();
     recordApiCall(url, 'GET', null, data, null, res.status);
     localStorage.setItem(cacheKey, JSON.stringify({
         timestamp: now,
         data: data
     }));
-    
+
     return data;
 }
 window.fetchWithCache = fetchWithCache;
@@ -315,18 +315,18 @@ window.fetchWithCache = fetchWithCache;
 function cleanUpCache() {
     const now = Date.now();
     const deleted = [];
-    
+
     // Iterate backwards to avoid index shifting when removing items
     for (let i = localStorage.length - 1; i >= 0; i--) {
         const key = localStorage.key(i);
         if (!key) continue;
-        
+
         // Only clean cache keys managed by this app
         const isContentCache = key.startsWith(App.cache.KEYS.PAGE_CONTENT_PREFIX);
         const isTargetsCache = key === App.cache.KEYS.TARGETS;
-        
+
         if (!isContentCache && !isTargetsCache) continue;
-        
+
         try {
             const item = JSON.parse(localStorage.getItem(key));
             if (!item || !item.timestamp) {
@@ -335,12 +335,12 @@ function cleanUpCache() {
                 deleted.push(key);
                 continue;
             }
-            
+
             // Use appropriate TTL per key type, with 2x safety margin
             const ttl = isContentCache
                 ? App.cache.TTL.PAGE_CONTENT * 2
                 : App.cache.TTL.TARGETS * 2;
-            
+
             if (now - item.timestamp > ttl) {
                 localStorage.removeItem(key);
                 deleted.push(key);
@@ -351,7 +351,7 @@ function cleanUpCache() {
             deleted.push(key);
         }
     }
-    
+
     if (deleted.length > 0) {
         debugLog(`[Cache] Cleaned up ${deleted.length} expired item(s)`);
     }
@@ -369,10 +369,10 @@ async function loadTargets(forceRefresh = false) {
         return;
     }
     _loadTargetsRunning = true;
-    
+
     try {
         let data;
-        
+
         if (forceRefresh) {
             // 強制更新：キャッシュをバイパスしてAPIから直接取得
             localStorage.removeItem(App.cache.KEYS.TARGETS);
@@ -392,14 +392,14 @@ async function loadTargets(forceRefresh = false) {
 
         } else {
             data = await fetchWithCache(
-                '/api/targets', 
+                '/api/targets',
                 App.cache.KEYS.TARGETS,
                 App.cache.TTL.TARGETS
             );
         }
-        
+
         renderTargetOptions(data.targets);
-        
+
         // Update last refresh timestamp
         App.cache.lastTargetRefresh = Date.now();
 
@@ -429,10 +429,10 @@ function renderTargetOptions(targets) {
     /** @type {HTMLSelectElement | null} */
     const selector = /** @type {any} */(document.getElementById('appSelector'));
     if (!selector) return;
-    
+
     // 現在の選択値を保持
     const currentVal = selector.value;
-    
+
     // Clear existing options
     selector.innerHTML = '';
 
@@ -441,7 +441,7 @@ function renderTargetOptions(targets) {
     newPageOpt.value = 'new_page';
     newPageOpt.textContent = '＋ 新規ページ作成...';
     selector.appendChild(newPageOpt);
-    
+
     // Filter out empty titles
     const validTargets = targets.filter(t => t.title && t.title.trim());
 
@@ -455,14 +455,14 @@ function renderTargetOptions(targets) {
         opt.dataset.type = t.type;
         selector.appendChild(opt);
     });
-    
+
     // Default Selection Logic
     let targetToSelect = null;
 
     // 1. Try to restore current selection
     if (currentVal && currentVal !== 'new_page' && Array.from(selector.options).some(o => o.value === currentVal)) {
         targetToSelect = currentVal;
-    } 
+    }
     // 2. Try to restore saved selection
     else {
         const savedTargetId = localStorage.getItem('memo_ai_last_target');
@@ -483,9 +483,9 @@ function renderTargetOptions(targets) {
         handleTargetChange(true);
     } else {
         // Fallback if no targets exist at all (only "Create New Page")
-        selector.value = 'new_page'; 
+        selector.value = 'new_page';
     }
-    
+
     // Auto-open new page modal if no valid targets exist (empty list)
     if (validTargets.length === 0) {
         // Use setTimeout to ensure DOM is fully rendered and modal event listeners are ready
@@ -501,13 +501,13 @@ function renderTargetOptions(targets) {
  * @returns {Promise<void>}
  */
 async function handleTargetChange(skipRefreshOrEvent = false) {
-    
+
     /** @type {HTMLSelectElement | null} */
     const selector = /** @type {any} */(document.getElementById('appSelector'));
     if (!selector) return;
     const selectedOpt = selector.options[selector.selectedIndex];
     const targetId = selector.value;
-    
+
     // 新規ページ作成の場合
     if (targetId === 'new_page') {
         openNewPageModal();
@@ -522,39 +522,39 @@ async function handleTargetChange(skipRefreshOrEvent = false) {
         }
         return;
     }
-    
+
     if (!targetId) {
         // Should not happen with new logic, but keep for safety
         App.target = { id: null, type: null, schema: null, systemPrompt: null };
         return;
     }
-    
+
     const type = selectedOpt.dataset.type;
     App.target.id = targetId;
     App.target.type = type;
     App.target.systemPrompt = null; // Initialize systemPrompt property
-    
+
     // 選択を保存
     localStorage.setItem('memo_ai_last_target', targetId);
-    
+
     // システムプロンプトの読み込み
     const promptKey = `${App.cache.KEYS.PROMPT_PREFIX}${targetId}`;
     const customPrompt = localStorage.getItem(promptKey);
     App.target.systemPrompt = customPrompt || null;
-    
+
     console.log(`Target set: ${type} ${targetId}`, customPrompt ? '(Has custom prompt)' : '(Default prompt)');
-    
+
     // UI更新 (optional elements may not exist)
     const formContainer = document.getElementById('propertiesForm');
     const propsContainer = document.getElementById('propertiesContainer');
     const propsSection = document.getElementById('propertiesSection');
-    
+
     if (type === 'database') {
 
         // Show properties container for DB
         if (propsContainer) propsContainer.style.display = 'block';
         if (propsSection) propsSection.classList.add('hidden');
-        
+
         // スキーマ取得
         try {
             const res = await fetch(`/api/schema/${targetId}`);
@@ -572,11 +572,11 @@ async function handleTargetChange(skipRefreshOrEvent = false) {
         }
     } else {
         App.target.schema = null;
-        
+
         // Hide properties container for Page
         if (propsContainer) propsContainer.style.display = 'none';
     }
-    
+
     // Note: リスト更新はセレクターの click イベントリスナーで行う（5秒スロットリング付き）
     // handleTargetChange 内では実行しない（二重更新防止）
 }
@@ -584,15 +584,15 @@ window.handleTargetChange = handleTargetChange;
 
 /**
  * Fetches and truncates page content for context.
- * @param {string} pageId 
- * @param {string} type 
+ * @param {string} pageId
+ * @param {string} type
  * @returns {Promise<string | null>} Truncated content or null
  */
 async function fetchAndTruncatePageContent(pageId, type) {
     // 参照ページが有効かチェック
     // 注: ここでの呼び出し元は sendStamp や handleChatAI
     // 既に機能制限でリファレンス機能を削除した場合はnullを返す
-    
+
     try {
         const cacheKey = `${App.cache.KEYS.PAGE_CONTENT_PREFIX}${pageId}`;
         const data = await fetchWithCache(
@@ -600,7 +600,7 @@ async function fetchAndTruncatePageContent(pageId, type) {
             cacheKey,
             App.cache.TTL.PAGE_CONTENT
         );
-        
+
         // テキストのみ抽出して短くする（トークン節約）
         let text = "";
         if (data.content) {
@@ -618,17 +618,17 @@ window.fetchAndTruncatePageContent = fetchAndTruncatePageContent;
 
 function renderDynamicForm(container, schema) {
 
-    
+
     if (!container) {
         console.error('[DEBUG] No container element found!');
         return;
     }
     container.innerHTML = '';
-    
+
     // **重要**: 逆順で表示 (Reverse Order)
     const entries = Object.entries(schema).reverse();
 
-    
+
     for (const [key, prop] of entries) {
         // Notionが自動管理するシステムプロパティは編集不要なのでスキップ
         if (['created_time', 'last_edited_time', 'created_by', 'last_edited_by'].includes(prop.type)) {
@@ -637,46 +637,46 @@ function renderDynamicForm(container, schema) {
 
         // タイトルプロパティはメイン入力欄を使うのでスキップ
         if (prop.type === 'title') continue;
-        
+
         const wrapper = document.createElement('div');
         wrapper.className = 'prop-field';
-        
+
         const label = document.createElement('label');
         label.className = 'prop-label';
         label.textContent = key;
         wrapper.appendChild(label);
-        
+
         let input;
-        
+
         if (prop.type === 'select' || prop.type === 'multi_select' || prop.type === 'status') {
             input = document.createElement('select');
             input.className = 'prop-input';
             input.dataset.key = key;
             input.dataset.type = prop.type;
-            
+
             // Note: multi_selectでもinput.multiple = trueを設定しない
             // Notionでは複数選択可能だが、UIでは単一選択として扱う
             // （優先度、工数レベルなどと同じ動作）
-            
+
             // 空のオプション (デフォルト)
             const def = document.createElement('option');
             def.value = "";
             def.textContent = "(未選択)";
             input.appendChild(def);
-            
+
             // Notionスキーマに定義されている固定オプションを追加
             // status タイプは prop.status.options、select/multi_select は prop[prop.type].options
-            const options = prop.type === 'status' 
+            const options = prop.type === 'status'
                 ? (prop.status?.options || [])
                 : (prop[prop.type]?.options || []);
-            
+
             options.forEach(o => {
                 const opt = document.createElement('option');
                 opt.value = o.name;
                 opt.textContent = o.name;
                 input.appendChild(opt);
             });
-            
+
         } else if (prop.type === 'date') {
             input = document.createElement('input');
             input.type = 'date';
@@ -715,7 +715,7 @@ function renderDynamicForm(container, schema) {
             input.dataset.key = key;
             input.dataset.type = prop.type;
         }
-        
+
         wrapper.appendChild(input);
         container.appendChild(wrapper);
     }
@@ -726,23 +726,23 @@ async function saveToDatabase() {
     const memoInput = /** @type {any} */(document.getElementById('memoInput'));
     if (!memoInput) return;
     const content = memoInput.value;
-    
+
     if (!content && !App.image.data) {
         showToast('メモまたは画像を入力してください');
         return;
     }
-    
+
     setLoading(true);
-    
+
     // プロパティ収集
     const properties = {};
     const inputs = document.querySelectorAll('#propertiesForm .prop-input');
-    
+
     inputs.forEach(/** @param {Element} el */ el => {
         const input = /** @type {HTMLElement} */(el);
         const key = input.dataset?.key;
         const type = input.dataset?.type;
-        
+
         if (type === 'select' || type === 'status') {
             if (/** @type {HTMLSelectElement} */(input).value) {
                 const propType = type === 'status' ? 'status' : 'select';
@@ -773,17 +773,17 @@ async function saveToDatabase() {
         text: content,
         properties: properties
     };
-    
+
     try {
-        await performSaveRequest(body, { 
-            success: '保存しました', 
-            failure: '保存失敗' 
+        await performSaveRequest(body, {
+            success: '保存しました',
+            failure: '保存失敗'
         });
-        
+
         // クリア
         memoInput.value = '';
         clearPreviewImage();
-        
+
         // フォームリセット
         inputs.forEach(/** @param {Element} el */ el => {
              const input = /** @type {HTMLElement} */(el);
@@ -791,7 +791,7 @@ async function saveToDatabase() {
              else if (input.tagName === 'SELECT') /** @type {HTMLSelectElement} */(input).selectedIndex = -1;
              else /** @type {HTMLInputElement} */(input).value = '';
         });
-        
+
     } catch (e) {
         console.error('Save error', e);
         updateSaveStatus('❌ 保存失敗');
@@ -806,30 +806,30 @@ async function saveToPage() {
     const memoInput = /** @type {any} */(document.getElementById('memoInput'));
     if (!memoInput) return;
     const content = memoInput.value;
-    
+
     if (!content && !App.image.data) {
         showToast('メモまたは画像を入力してください');
         return;
     }
-    
+
     setLoading(true);
-    
+
     const body = {
         target_db_id: App.target.id,
         target_type: 'page',
         text: content,
         properties: {} // Required by backend
     };
-    
+
     try {
         await performSaveRequest(body, {
             success: 'ページに追記しました',
             failure: '追記失敗'
         });
-        
+
         memoInput.value = '';
         clearPreviewImage();
-        
+
     } catch (e) {
         console.error('Append error', e);
     } finally {
@@ -842,7 +842,7 @@ async function handleDirectSave() {
         showToast('ターゲットを選択してください');
         return;
     }
-    
+
     if (App.target.type === 'database') {
         await saveToDatabase();
     } else {
@@ -860,11 +860,11 @@ function openContentModal() {
         showToast('ターゲットを選択してください');
         return;
     }
-    
+
     // 内蔵ビューワーではなく、ブラウザでNotionページを直接開く
     const notionUrl = `https://www.notion.so/${App.target.id.replace(/-/g, '')}`;
     window.open(notionUrl, '_blank');
-    
+
     showToast('Notionページを開きました');
 }
 window.openContentModal = openContentModal;
@@ -879,16 +879,16 @@ function openNewPageModal() {
     const createBtn = document.getElementById('createNewPageBtn');
     const cancelBtn = document.getElementById('cancelNewPageBtn');
     const closeBtn = document.getElementById('closeNewPageModalBtn');
-    
+
     if (!modal || !input || !createBtn || !cancelBtn || !closeBtn) return;
-    
+
     // Clear previous input
     input.value = '';
-    
+
     // Show modal
     modal.classList.remove('hidden');
     input.focus();
-    
+
     // Handle keyboard events
     const onKeydown = (/** @type {KeyboardEvent} */ e) => {
         if (e.key === 'Enter') {
@@ -898,7 +898,7 @@ function openNewPageModal() {
             handleCancel();
         }
     };
-    
+
     // Handle create button
     const handleCreate = () => {
         const title = input.value.trim();
@@ -911,7 +911,7 @@ function openNewPageModal() {
             showToast('ページ名を入力してください');
         }
     };
-    
+
     // Handle cancel
     const handleCancel = () => {
         // Clean up listener BEFORE closing modal
@@ -921,7 +921,7 @@ function openNewPageModal() {
         const appSelector = /** @type {HTMLSelectElement} */(document.getElementById('appSelector'));
         if (appSelector) appSelector.value = App.target.id || '';
     };
-    
+
     // Add event listeners with {once: true} to auto-cleanup
     createBtn.addEventListener('click', handleCreate, {once: true});
     cancelBtn.addEventListener('click', handleCancel, {once: true});
@@ -939,21 +939,21 @@ async function createNewPage(title) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(reqBody)
         });
-        
+
         if (!res.ok) {
             const errText = await res.text();
             recordApiCall('/api/pages/create', 'POST', reqBody, null, errText, res.status);
             throw new Error(errText);
         }
-        
+
         /** @type {CreatePageApiResponse} */
         const data = await res.json();
         recordApiCall('/api/pages/create', 'POST', reqBody, data, null, res.status);
         showToast(`ページ「${title}」を作成しました`);
-        
+
         // ターゲットリスト再読み込み（強制更新で最新のリストを取得）
         await loadTargets(true);
-        
+
         // 作成したページを選択（skipRefresh=true でリスト再取得を防止）
         /** @type {HTMLSelectElement | null} */
         const selector = /** @type {any} */(document.getElementById('appSelector'));
@@ -961,7 +961,7 @@ async function createNewPage(title) {
             selector.value = data.id;
             handleTargetChange(true);
         }
-        
+
     } catch(e) {
         const errorMessage = /** @type {Error} */(e).message;
         showToast(`作成失敗: ${errorMessage}`);
@@ -976,7 +976,7 @@ function handleSuperReload() {
     if (confirm('【注意】\n保存されたターゲットリスト、チャット履歴、キャッシュなどを全て削除してリロードします。\n未保存のデータは失われます。\nよろしいですか？')) {
         // ローカルストレージを全クリア
         localStorage.clear();
-        
+
         // キャッシュをクリアしてリロード (reload(true) is deprecated)
         window.location.reload();
     }
@@ -993,20 +993,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Emoji/Stamp
     const emojiBtn = document.getElementById('emojiBtn');
     const emojiPalette = document.getElementById('emojiPalette');
-    
+
     if (emojiBtn && emojiPalette) {
         emojiBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             emojiPalette.classList.toggle('hidden');
         });
-        
+
         // Close on outside click
         document.addEventListener('click', (e) => {
             if (e.target instanceof Node && !emojiBtn.contains(e.target) && !emojiPalette.contains(e.target)) {
                 emojiPalette.classList.add('hidden');
             }
         });
-        
+
         // Stamp selection
         document.querySelectorAll('.emoji-btn').forEach(item => {
             item.addEventListener('click', () => {
@@ -1016,21 +1016,21 @@ document.addEventListener('DOMContentLoaded', async () => {
             });
         });
     }
-    
+
     // Memo Input
     const memoInput = document.getElementById('memoInput');
-    
+
     if (memoInput) {
         // Auto-resize
         memoInput.addEventListener('input', function() {
             this.style.height = 'auto';
             this.style.height = (this.scrollHeight) + 'px';
         });
-        
+
         // IME handling
         memoInput.addEventListener('compositionstart', () => { App.chat.isComposing = true; });
         memoInput.addEventListener('compositionend', () => { App.chat.isComposing = false; });
-        
+
         // Enter to send (Shift+Enter for newline)
         memoInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && !e.shiftKey && !App.chat.isComposing) {
@@ -1038,7 +1038,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 // ターゲットが設定されていて、かつチャットモードなら送信
                 // ここでは便宜上、Ctrl+Enterまたは明示的なボタンでNotion保存
                 // EnterのみはチャットAI送信とする（仕様確認要だが既存踏襲）
-                
+
                 const text = /** @type {HTMLTextAreaElement} */(memoInput).value.trim();
                 if (text || App.image.data) {
                     handleChatAI(text);
@@ -1046,13 +1046,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         });
     }
-    
+
     // Settings & Menu
     const settingsBtn = document.getElementById('settingsBtn');
     if (settingsBtn) {
         settingsBtn.addEventListener('click', toggleSettingsMenu);
     }
-    
+
     // Close settings on outside click
     document.addEventListener('click', (e) => {
         const menu = document.getElementById('settingsMenu');
@@ -1063,11 +1063,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Cache housekeeping (remove expired items before loading new data)
     cleanUpCache();
-    
+
     // Initial Loads
     loadTargets();      // Load Notion targets
     loadChatHistory();  // Load chat history
-    
+
     // AI Info Display Toggle
     /** @type {HTMLInputElement | null} */
     const showInfoToggle = /** @type {any} */(document.getElementById('showModelInfoToggle'));
@@ -1078,7 +1078,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             App.debug.showModelInfo = savedShowInfo === 'true';
         }
         showInfoToggle.checked = App.debug.showModelInfo;
-        
+
         // Add listener
         showInfoToggle.addEventListener('change', (e) => {
             App.debug.showModelInfo = /** @type {HTMLInputElement} */(e.target).checked;
@@ -1086,13 +1086,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             renderChatHistory(); // Re-render to show/hide info immediately
         });
     }
-    
+
     // Initialize Debug Mode (async)
-    initializeDebugMode(); 
-    
+    initializeDebugMode();
+
     // Initialize Models
     loadAvailableModels();
-    
+
 });
 
 // UI Event Handlers defined in HTML (onclick) need to be globablly accessible
@@ -1107,10 +1107,10 @@ window.toggleSettingsMenu = toggleSettingsMenu;
 // --- Form Fill Function (for AI extracted properties) ---
 function fillForm(properties) {
     if (!properties) return;
-    
+
     // Original implementation looked for inputs directly
     const inputs = document.querySelectorAll('#propertiesForm .prop-input');
-    
+
     inputs.forEach(/** @param {Element} el */ el => {
         const input = /** @type {HTMLElement} */(el);
         const key = input.dataset?.key;
@@ -1153,7 +1153,7 @@ window.handleSessionClear = handleSessionClear;
 // --- Event Listeners Setup ---
 document.addEventListener('DOMContentLoaded', () => {
     const settingsMenu = document.getElementById('settingsMenu');
-    
+
     // Edit Prompt
     const editPromptItem = document.getElementById('editPromptMenuItem');
     if (editPromptItem) {
@@ -1162,7 +1162,7 @@ document.addEventListener('DOMContentLoaded', () => {
             openPromptModal();
         });
     }
-    
+
     // Model Select
     const modelSelectItem = document.getElementById('modelSelectMenuItem');
     if (modelSelectItem) {
@@ -1171,7 +1171,7 @@ document.addEventListener('DOMContentLoaded', () => {
             openModelModal();
         });
     }
-    
+
     // Debug Info
     const debugInfoItem = document.getElementById('debugInfoMenuItem');
     if (debugInfoItem) {
@@ -1180,7 +1180,7 @@ document.addEventListener('DOMContentLoaded', () => {
             openDebugModal();
         });
     }
-    
+
     // Super Reload
     const superReloadItem = document.getElementById('superReloadMenuItem');
     if (superReloadItem) {
@@ -1189,19 +1189,19 @@ document.addEventListener('DOMContentLoaded', () => {
             handleSuperReload();
         });
     }
-    
+
     // Session Clear (if exists)
     const sessionClearBtn = document.getElementById('sessionClearBtn');
     if (sessionClearBtn) {
         sessionClearBtn.addEventListener('click', handleSessionClear);
     }
-    
+
     // View Content Button
     const viewContentBtn = document.getElementById('viewContentBtn');
     if (viewContentBtn) {
         viewContentBtn.addEventListener('click', openContentModal);
     }
-    
+
     // Model modal buttons
     const closeModelBtn = document.getElementById('closeModelModalBtn');
     const cancelModelBtn = document.getElementById('cancelModelBtn');
@@ -1209,7 +1209,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (closeModelBtn) closeModelBtn.addEventListener('click', closeModelModal);
     if (cancelModelBtn) cancelModelBtn.addEventListener('click', closeModelModal);
     if (saveModelBtn) saveModelBtn.addEventListener('click', saveModelSelection);
-    
+
     // Debug modal buttons
     const closeDebugModalBtn = document.getElementById('closeDebugModalBtn');
     const closeDebugBtn = document.getElementById('closeDebugBtn');
@@ -1217,7 +1217,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (closeDebugModalBtn) closeDebugModalBtn.addEventListener('click', closeDebugModal);
     if (closeDebugBtn) closeDebugBtn.addEventListener('click', closeDebugModal);
     if (refreshDebugBtn) refreshDebugBtn.addEventListener('click', loadDebugInfo);
-    
+
     // Prompt modal buttons
     // Prompt modal buttons
     const closePromptModalBtn = document.getElementById('closeModalBtn');
@@ -1228,7 +1228,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (cancelPromptBtn) cancelPromptBtn.addEventListener('click', closePromptModal);
     if (savePromptBtn) savePromptBtn.addEventListener('click', saveSystemPrompt);
     if (resetPromptBtn) resetPromptBtn.addEventListener('click', resetSystemPrompt);
-    
+
     // Properties toggle
     const togglePropsBtn = document.getElementById('togglePropsBtn');
     if (togglePropsBtn) {
@@ -1236,37 +1236,37 @@ document.addEventListener('DOMContentLoaded', () => {
             const section = document.getElementById('propertiesSection');
             if (section) {
                 section.classList.toggle('hidden');
-                togglePropsBtn.textContent = section.classList.contains('hidden') 
-                    ? ' 属性を表示' 
+                togglePropsBtn.textContent = section.classList.contains('hidden')
+                    ? ' 属性を表示'
                     : ' 属性を隠す';
             }
         });
     }
-    
+
     // Target selector change handler
     /** @type {HTMLSelectElement | null} */
     const appSelector = /** @type {any} */(document.getElementById('appSelector'));
     if (appSelector) {
         // Wrap handleTargetChange to match event listener signature
         appSelector.addEventListener('change', () => handleTargetChange(false));
-        
+
         // Refresh list when selector is clicked/opened (to detect deleted pages)
         // Throttle: Don't refresh if last refresh was within 5 seconds
         appSelector.addEventListener('click', () => {
             const now = Date.now();
             const timeSinceLastRefresh = now - App.cache.lastTargetRefresh;
             const THROTTLE_MS = 5000; // 5 seconds
-            
+
             if (timeSinceLastRefresh < THROTTLE_MS) {
                 debugLog(`[appSelector] Clicked but skipping refresh (last refresh was ${Math.round(timeSinceLastRefresh / 1000)}s ago)`);
                 return;
             }
-            
+
             debugLog('[appSelector] Clicked - refreshing target list');
             loadTargets(true);
         });
     }
-    
+
     // State display toggle button
     const stateToggle = document.getElementById('stateToggle');
     const stateDetails = document.getElementById('stateDetails');
