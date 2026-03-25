@@ -406,9 +406,19 @@ async def generate_image_response(prompt: str, model: str) -> Dict[str, Any]:
         except Exception as e:
             logger.warning("Cost calculation failed for image generation: %s", e)
 
+        # ⚠️ 既知の問題: LiteLLMのバグ (GitHub Issue #17410) により、
+        # Gemini画像生成モデルの completion_cost() が image_tokens を正しく認識できず、
+        # cost=0 を返す場合があります。この問題はLiteLLM側での修正待ちです。
+        # 画像出力トークンの単価はテキストの12倍 ($30/1M vs $2.5/1M) と高額なため、
+        # 実際のコストとデバッグパネルの表示が乖離する可能性があります。
+        # Google Cloud Consoleで実際の請求額を確認することを推奨します。
+
         duration = time.time() - start_time
 
         # ログ記録 (base64データはサニタイズされる)
+        # 注: attempt=0 を渡す (_record_llm_log 内で +1 して表示するため)
+        # 以前は attempt=1 がハードコードされており、デバッグパネルで
+        # 常に "attempt: 2" と表示されるバグがあった
         _record_llm_log(
             model=model,
             messages=[{"role": "user", "content": prompt}],
@@ -416,7 +426,7 @@ async def generate_image_response(prompt: str, model: str) -> Dict[str, Any]:
             usage=usage,
             cost=cost,
             duration=duration,
-            attempt=1,
+            attempt=0,
             error=None,
         )
 
@@ -447,7 +457,7 @@ async def generate_image_response(prompt: str, model: str) -> Dict[str, Any]:
             usage={},
             cost=0.0,
             duration=duration,
-            attempt=1,
+            attempt=0,  # _record_llm_log 内で +1 される
             error=str(e),
         )
 

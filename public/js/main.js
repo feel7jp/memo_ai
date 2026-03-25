@@ -246,10 +246,13 @@ function updateState(icon, message, details = null) {
     stateIcon.textContent = icon;
     stateText.textContent = message;
     stateDisplay.classList.remove('hidden');
-
-    // Update details content if provided
-    if (stateDetailsContent && details) {
+    
+    // デバッグモードの時のみ詳細情報を表示
+    if (stateDetailsContent && details && window.App.debug.serverMode) {
         stateDetailsContent.textContent = JSON.stringify(details, null, 2);
+    } else if (stateDetailsContent) {
+        // デバッグモードでない場合はクリア
+        stateDetailsContent.textContent = '';
     }
 
 
